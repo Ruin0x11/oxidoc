@@ -1,0 +1,13 @@
+[package]
+name = "rd"
+version = "0.1.0"
+authors = ["ruin"]
+
+[dependencies]
+syntex_syntax = "0.58.1"
+serde = "0.9.9"
+serde_derive = "0.9.9"
+serde_json = "0.9.8"
+toml = "0.3"
+clap = "2.20.5"
+error-chain = "0.10.0"
