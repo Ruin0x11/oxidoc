@@ -8,6 +8,9 @@ extern crate serde_derive;
 #[macro_use]
 extern crate error_chain;
 
+mod driver;
+mod paths;
+
 use std::collections::HashMap;
 use std::env;
 use std::path::{Path, PathBuf};
