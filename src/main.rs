@@ -10,6 +10,7 @@ extern crate error_chain;
 
 mod driver;
 mod paths;
+mod store;
 
 use std::collections::HashMap;
 use std::env;
@@ -146,21 +147,27 @@ fn main() {
     }
 }
 
-/// Generates cached Rustdoc information for the given crate.
-/// Expects the crate root directory as an argument.
 fn run() -> Result<()> {
     let args: Vec<String> = env::args().collect();
     if args.len() != 2 {
         bail!("Wrong number of args (1 expected)");
     }
 
-    let path = Path::new(args[1].as_str());
-    let toml_path = path.join("Cargo.toml");
+    let path = cache_doc_for_crate(&args[1])?;
+    let mut store = store::Store::new(path, "asd".to_string());
+    store.load_cache();
 
-    println!("Looking in {:?}", toml_path);
+    Ok(())
+}
 
-    let mut fp = File::open(toml_path).chain_err(|| "Could not find Cargo.toml in
-    specified path")?;
+/// Generates cached Rustdoc information for the given crate.
+/// Expects the crate root directory as an argument.
+fn cache_doc_for_crate(crate_path_name: &String) -> Result<PathBuf> {
+
+    let crate_path = Path::new(crate_path_name.as_str());
+    let toml_path = crate_path.join("Cargo.toml");
+
+    let mut fp = File::open(&toml_path).chain_err(|| format!("Could not find Cargo.toml in path {}", toml_path.display()))?;
 
     let ref mut contents = String::new();
     fp.read_to_string(contents).chain_err(|| "Failed to read from file")?;
@@ -170,9 +177,9 @@ fn run() -> Result<()> {
     let parse_session = ParseSess::new();
 
     // TODO: This has to handle [lib] targets and multiple [[bin]] targets.
-    let mut main_path = path.join("src/lib.rs");
+    let mut main_path = crate_path.join("src/lib.rs");
     if !main_path.exists() {
-        main_path = path.join("src/main.rs");
+        main_path = crate_path.join("src/main.rs");
         if!main_path.exists() {
             bail!("No crate entry point found (nonstandard paths are unsupported)");
         }
@@ -180,9 +187,7 @@ fn run() -> Result<()> {
     let krate = parse(main_path.as_path(), &parse_session).unwrap();
 
     generate_doc_cache(&krate, parse_session.codemap(), info)
-        .chain_err(|| "Failed to generate doc cache")?;
-
-    Ok(())
+        .chain_err(|| "Failed to generate doc cache")
 }
 
 struct RustdocCacher<'a> {
@@ -268,7 +273,6 @@ impl<'v, 'a> Visitor<'v> for RustdocCacher<'a> {
                     abi: my_abi,
                 };
 
-                println!("Doc! {:?}", doc);
                 self.fn_docs.push(doc);
             },
             FnKind::Method(id, _, _, _) => {
@@ -294,7 +298,7 @@ impl<'v, 'a> Visitor<'v> for RustdocCacher<'a> {
     }
 }
 
-fn generate_doc_cache(krate: &ast::Crate, codemap: &CodeMap, crate_info: CrateInfo) -> Result<()> {
+fn generate_doc_cache(krate: &ast::Crate, codemap: &CodeMap, crate_info: CrateInfo) -> Result<PathBuf> {
     let mut visitor = RustdocCacher {
         arg_counts: HashMap::new(),
         codemap: codemap,
@@ -317,8 +321,16 @@ fn generate_doc_cache(krate: &ast::Crate, codemap: &CodeMap, crate_info: CrateIn
     create_dir_all(&outdir).chain_err(|| "Failed to create doc cache dir")?;
 
     let outfile = outdir.join(format!("{}-{}.rd", crate_info.package.name, crate_info.package.version));
-    let mut fp = File::create(outfile).chain_err(|| "Could not open cache file")?;
+    let mut fp = File::create(&outfile).chain_err(|| "Could not open cache file")?;
     fp.write_all(json.as_bytes()).chain_err(|| "Failed to write to cache file")?;
 
-    Ok(())
+    Ok(outfile)
+}
+
+#[test]
+fn test_save_load_store() {
+    let pathbuf = cache_doc_for_crate(&"/home/nuko/.cargo/registry/src/github.com-1ecc6299db9ec823/bytecount-0.1.6/".to_string()).unwrap();
+
+    let mut store = store::Store::new(pathbuf, "bytecount".to_string());
+    store.load_cache();
 }
