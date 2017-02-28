@@ -4,112 +4,30 @@ use syntax::print::pprust;
 use serde_json;
 
 use std::env;
-use std::fs::create_dir_all;
-use std::collections::HashMap;
+use std::ffi::OsStr;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::fs::{File};
+use std::fs::{create_dir_all, read_dir, File};
 use std::io::{Read, Write};
 
 use ::errors::*;
-use ::FnDoc;
-use ::ModPath;
-use ::PathSegment;
+use generator::{PathSegment, FnDoc, ModPath};
 
 type ProjectName = String;
 type ModuleName = String;
 type FunctionName = String;
 
-/// Contains all information for a single project
-pub struct Store {
-    outdir: PathBuf,
-    name: ProjectName,
+pub struct StoreLoc<'a> {
+    pub store: &'a Store,
+    pub scope: ModPath,
+    pub method: String,
+}   
 
-    modules: Vec<ModuleName>,
-    functions: HashMap<ModuleName, FunctionName>,
+/// Gets the fully qualified output directory for the current module scope.
+pub fn get_full_dir(store_path: &PathBuf , scope: &ModPath) -> PathBuf {
+    let rest = scope.to_path();
 
-    current_scope: ::ModPath,
-}
-
-impl Store {
-    pub fn new(crate_info: &::CrateInfo) -> Result<Store> {
-        let crate_doc_path = get_crate_doc_path(&crate_info)
-            .chain_err(|| format!("Unable to get crate doc path for crate: {}", crate_info.package.name))?;
-
-        Ok(Store {
-            outdir: crate_doc_path,
-            name: crate_info.package.name.clone(),
-            modules: Vec::new(),
-            functions: HashMap::new(),
-            current_scope: ModPath(Vec::new()),
-        })
-    }
-
-    #[cfg(never)]
-    pub fn load_cache(&mut self) -> Result<()> {
-        let path =  self.outdir.as_path();
-        let mut fp = File::open(path)
-            .chain_err(|| format!("Couldn't find rd store {}", path.display()))?;
-
-        let mut json = String::new();
-        fp.read_to_string(&mut json)
-            .chain_err(|| format!("Couldn't read rd store {}", path.display()))?;
-
-        let fn_docs: Vec<FnDoc> = serde_json::from_str(&json)
-            .chain_err(|| format!("Store {} is not valid JSON", path.display()))?;
-
-        for func in &fn_docs {
-            self.functions.insert(func.to_string(), func.signature);
-            println!("{}", func.signature);
-        }
-
-        Ok(())
-    }
-
-    fn get_full_outdir(&self) -> PathBuf {
-        let rest = self.current_scope.0.iter().fold(String::new(), |res, s| res + &s.identifier.clone() + "/");
-
-        println!("full outdir: {}", rest);
-        self.outdir.join(rest)
-    }
-
-    pub fn write_fn(&self, fn_doc: FnDoc) -> Result<PathBuf> {
-        let json = serde_json::to_string(&fn_doc).unwrap();
-        let full_outdir = self.get_full_outdir();
-
-        create_dir_all(&full_outdir).chain_err(|| format!("Failed to create module dir {}", self.outdir.display()))?;
-
-        let outfile = get_fn_file(&full_outdir, &fn_doc);
-
-        let mut fp = File::create(&outfile).chain_err(|| format!("Could not method rd file {}", outfile.display()))?;
-        fp.write_all(json.as_bytes()).chain_err(|| format!("Failed to write to method rd file {}", outfile.display()))?;
-
-        println!("Wrote {}", &outfile.display());
-
-        Ok(outfile)
-    }
-
-    pub fn push_path(&mut self, ident: ast::Ident) {
-        let seg = PathSegment{ identifier: pprust::ident_to_string(ident) };
-        println!("push {}", seg.identifier);
-        self.current_scope.push(seg);
-    }
-    pub fn pop_path(&mut self) {
-        println!("pop");
-        self.current_scope.pop();
-    }
-}
-
-fn get_crate_doc_path(crate_info: &::CrateInfo) -> Result<PathBuf> {
-    let home_dir: PathBuf;
-    if let Some(x) = env::home_dir() {
-        home_dir = x
-    } else {
-        bail!("Could not locate home directory");
-    }
-
-    let path = home_dir.as_path().join(".cargo/registry/doc")
-        .join(format!("{}-{}", crate_info.package.name, crate_info.package.version));
-    Ok(path)
+    store_path.join(rest)
 }
 
 fn get_fn_file(path: &PathBuf, fn_doc: &FnDoc) -> PathBuf {
@@ -121,6 +39,127 @@ fn get_fn_file(path: &PathBuf, fn_doc: &FnDoc) -> PathBuf {
     path.join(result)
 }
 
-// fn lookup_method(store: Store, name: String) -> Result<String> {
+/// A set of Rustdoc documentation for a single crate.
+pub struct Store {
+    pub path: PathBuf,
+    name: ProjectName,
 
-// }
+    modules: HashSet<ModuleName>,
+    functions: HashMap<ModuleName, FunctionName>,
+}
+
+impl Store {
+    pub fn new(path: PathBuf) -> Result<Store> {
+
+        Ok(Store {
+            path: path,
+            name: String::new(),
+            modules: HashSet::new(),
+            functions: HashMap::new(),
+        })
+    }
+
+    pub fn get_modules(&self) -> &HashSet<ModuleName> {
+        &self.modules
+    }
+
+    pub fn load_cache(&mut self) -> Result<()> {
+        let path = self.path.join("cache.rd");
+
+        let mut fp = File::open(&path)
+            .chain_err(|| format!("Couldn't find rd cache {}", &path.display()))?;
+
+        let mut json = String::new();
+        fp.read_to_string(&mut json)
+            .chain_err(|| format!("Couldn't read rd cache {}", &path.display()))?;
+
+        let module_names: HashSet<ModuleName> = serde_json::from_str(&json).unwrap();
+        println!("MN: {:?}", &module_names);
+        self.modules = module_names;
+
+        Ok(())
+    }
+
+    pub fn load_method(&self, loc: StoreLoc) -> Result<FnDoc> {
+        let doc_path = self.path.join(loc.scope.to_path())
+            .join(format!("{}.rd", loc.method));
+        let mut fp = File::open(&doc_path)
+            .chain_err(|| format!("Couldn't find rd store {}", doc_path.display()))?;
+
+        let mut json = String::new();
+        fp.read_to_string(&mut json)
+            .chain_err(|| format!("Couldn't read rd store {}", doc_path.display()))?;
+
+        let fn_doc: FnDoc = serde_json::from_str(&json).unwrap();
+
+        println!("{}\n{}", fn_doc.to_string(), fn_doc.signature);
+
+        Ok(fn_doc)
+    }
+
+    /// Writes a .rd JSON store documenting a function.
+    pub fn write_fn(&mut self, fn_doc: FnDoc) -> Result<PathBuf> {
+        let json = serde_json::to_string(&fn_doc).unwrap();
+        let full_path = get_full_dir(&self.path, &fn_doc.path);
+
+        create_dir_all(&full_path).chain_err(|| format!("Failed to create module dir {}", self.path.display()))?;
+
+        let outfile = get_fn_file(&full_path, &fn_doc);
+
+        let mut fp = File::create(&outfile).chain_err(|| format!("Could not write method rd file {}", outfile.display()))?;
+        fp.write_all(json.as_bytes()).chain_err(|| format!("Failed to write to method rd file {}", outfile.display()))?;
+
+        // Insert the module name into the list of known module names
+        self.modules.insert(fn_doc.path.parent().to_string());
+
+        println!("Wrote {}", &outfile.display());
+
+        Ok(outfile)
+    }
+
+    pub fn save_cache(&self) -> Result<()> {
+        let json = serde_json::to_string(&self.modules).unwrap();
+
+        let outfile = self.path.join("cache.rd");
+        let mut fp = File::create(&outfile).chain_err(|| format!("Could not write cache file {}", outfile.display()))?;
+        fp.write_all(json.as_bytes()).chain_err(|| format!("Failed to write to method rd file {}", outfile.display()))?;
+
+        Ok(())
+    }
+
+    fn lookup_method(&self, name: String) -> Result<String> {
+        bail!("as");
+    }
+
+    //     fn find_methods(&self, name: String) -> Result<Vec<FnDoc>> {
+    //         // TODO: no caching/lookup is used.
+    //         let mut paths = Vec::new();
+    //         for module in self.modules {
+    //             let mod_path = ::ModPath::from(name);
+    //             let full_dir = get_full_dir(&self.path, &mod_path);
+
+    //             let mut doc_paths = read_dir(full_dir)
+    //                 .chain_err(|| "Couldn't read doc path")?;
+
+
+    //             // Recursively walk over doc directory
+    //         //     match walk_dir("a") {
+    //         //         Err(why) => bail!(format!("! {:?}", why.kind())),
+    //         //         Ok(doc_paths) => for doc in doc_paths {
+    //         //             if let Ok(doc_path) = doc {
+    //         //                 if let Ok(metadata) = doc_path.metadata() {
+    //         //                     if metadata.is_file()
+    //         //                         && doc_path.path().extension().unwrap() == OsStr::new("rd") {
+    //         //                             paths.push(doc_path.path());
+    //         //                         }
+    //         //                 }
+    //         //             }
+    //         //         },
+    //         //     }
+    //         // }
+
+    //         // let results = paths.iter().map(|p| load_method(p).unwrap()).collect::<Vec<FnDoc>>();
+
+    //     }
+             // Ok(results);
+}
