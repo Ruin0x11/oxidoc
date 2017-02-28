@@ -12,6 +12,10 @@ mod driver;
 mod paths;
 mod store;
 
+use store::Store;
+
+use std::fmt;
+use std::fmt::Display;
 use std::collections::HashMap;
 use std::env;
 use std::path::{Path, PathBuf};
@@ -86,6 +90,37 @@ pub struct PathSegment {
     // pub parameters: Option<P<PathParameters>>,
 }
 
+impl Display for PathSegment {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.identifier)
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ModPath(Vec<PathSegment>);
+
+impl ModPath {
+    fn from_ident(span: Span, ident: ast::Ident) -> ModPath {
+        ModPath(
+            ast::Path::from_ident(span, ident).segments.iter().map(
+                |seg| PathSegment { identifier: pprust::ident_to_string(seg.identifier) }).collect()
+        )
+    }
+    fn push(&mut self, seg: PathSegment) {
+        self.0.push(seg);
+    }
+    fn pop(&mut self) {
+        self.0.pop();
+    }
+}
+
+impl Display for ModPath {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let s = self.0.iter().map(|i| i.identifier.clone()).collect::<Vec<String>>().join("::");
+
+        write!(f, "{}", s)
+    }
+}
 
 /// Holds the name and version of crate for generating doc directory name
 #[derive(Debug, Serialize, Deserialize)]
@@ -96,19 +131,26 @@ struct Package {
 
 /// Holds the TOML fields we care about when deserializing
 #[derive(Debug, Serialize, Deserialize)]
-struct CrateInfo {
+pub struct CrateInfo {
     package: Package,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 struct FnDoc {
-    path: Vec<PathSegment>,
+    path: ModPath,
     signature: String,
     unsafety: Unsafety,
     constness: Constness,
     // TODO: Generics
     visibility: Visibility,
     abi: Abi,
+}
+
+impl Display for FnDoc {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let str = self.path.to_string();
+        write!(f, "{}", str)
+    }
 }
 
 fn parse<'a, T: ?Sized + AsRef<Path>>(path: &T,
@@ -154,15 +196,13 @@ fn run() -> Result<()> {
     }
 
     let path = cache_doc_for_crate(&args[1])?;
-    let mut store = store::Store::new(path, "asd".to_string());
-    store.load_cache();
 
     Ok(())
 }
 
 /// Generates cached Rustdoc information for the given crate.
 /// Expects the crate root directory as an argument.
-fn cache_doc_for_crate(crate_path_name: &String) -> Result<PathBuf> {
+fn cache_doc_for_crate(crate_path_name: &String) -> Result<()> {
 
     let crate_path = Path::new(crate_path_name.as_str());
     let toml_path = crate_path.join("Cargo.toml");
@@ -195,7 +235,7 @@ struct RustdocCacher<'a> {
     // The codemap is necessary to go from a `Span` to actual line & column
     // numbers for closures.
     codemap: &'a CodeMap,
-    fn_docs: Vec<FnDoc>,
+    store: Store,
 }
 
 impl<'a> RustdocCacher<'a> {
@@ -260,9 +300,7 @@ impl<'v, 'a> Visitor<'v> for RustdocCacher<'a> {
                     abi::Abi::Unadjusted        => Abi::Unadjusted
                 };
 
-                let my_path = ast::Path::from_ident(span, id).segments.iter().map(
-                    |seg| PathSegment { identifier: pprust::ident_to_string(seg.identifier) }).collect();
-
+                let my_path =  ModPath::from_ident(span, id);
                 let doc = FnDoc {
                     path: my_path,
                     signature: sig,
@@ -273,7 +311,7 @@ impl<'v, 'a> Visitor<'v> for RustdocCacher<'a> {
                     abi: my_abi,
                 };
 
-                self.fn_docs.push(doc);
+                self.store.write_fn(doc);
             },
             FnKind::Method(id, _, _, _) => {
                 //TODO: This makes sense only in the context of an impl / Trait
@@ -296,41 +334,56 @@ impl<'v, 'a> Visitor<'v> for RustdocCacher<'a> {
     fn visit_mac(&mut self, _mac: &'v ast::Mac) {
         // TODO: No, it isn't fine...
     }
+
+    fn visit_item(&mut self, item: &'v ast::Item) {
+        // Keep track of the path we're in as we traverse modules.
+        match item.node {
+            ast::ItemKind::Mod(ref module) => {
+                println!("Entering {:?}", item.ident);
+                self.store.push_path(item.ident);
+            },
+            _ => (),
+        }
+        visit::walk_item(self, item);
+
+        match item.node {
+            ast::ItemKind::Mod(ref module) => {
+                println!("Leaving {:?}", item.ident);
+                self.store.pop_path()
+            },
+            _ => (),
+        }
+    }
+
+    // fn visit_mod(&mut self, m: &'v ast::Mod, span: Span, node: ast::NodeId) {
+    //     for item in &m.items {
+    //         //let my_path = ModPath::from_ident(span, item.ident);
+    //         // NOTE: Use the ItemKind of an Item to determine if it's doc'ed.
+    //         match item.node {
+    //             ast::ItemKind::Mod(..) => println!("Mod: {}", item.ident),
+    //             _                      => (),
+    //         }
+    //     }
+    //     visit::walk_mod(self, m);
+    // }
 }
 
-fn generate_doc_cache(krate: &ast::Crate, codemap: &CodeMap, crate_info: CrateInfo) -> Result<PathBuf> {
+fn generate_doc_cache(krate: &ast::Crate, codemap: &CodeMap, crate_info: CrateInfo) -> Result<()> {
+    
     let mut visitor = RustdocCacher {
         arg_counts: HashMap::new(),
         codemap: codemap,
-        fn_docs: Vec::new(),
+        store: Store::new(&crate_info).unwrap(),
     };
+
     visitor.visit_mod(&krate.module, krate.span, ast::CRATE_NODE_ID);
 
-    let json = serde_json::to_string(&visitor.fn_docs).unwrap();
-
-    let home_dir: PathBuf;
-    if let Some(x) = env::home_dir() {
-        home_dir = x
-    } else {
-        bail!("Could not locate home directory");
-    }
-
-    // TODO: Modularize document sections by crate/module/trait
-    let outdir = Path::new(home_dir.as_path()).join(".cargo/registry/doc")
-        .join(format!("{}-{}", crate_info.package.name, crate_info.package.version));
-    create_dir_all(&outdir).chain_err(|| "Failed to create doc cache dir")?;
-
-    let outfile = outdir.join(format!("{}-{}.rd", crate_info.package.name, crate_info.package.version));
-    let mut fp = File::create(&outfile).chain_err(|| "Could not open cache file")?;
-    fp.write_all(json.as_bytes()).chain_err(|| "Failed to write to cache file")?;
-
-    Ok(outfile)
+    Ok(())
 }
-
 #[test]
 fn test_save_load_store() {
     let pathbuf = cache_doc_for_crate(&"/home/nuko/.cargo/registry/src/github.com-1ecc6299db9ec823/bytecount-0.1.6/".to_string()).unwrap();
 
-    let mut store = store::Store::new(pathbuf, "bytecount".to_string());
+    let mut store = Store::new(pathbuf, "bytecount".to_string());
     store.load_cache();
 }
