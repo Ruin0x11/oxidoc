@@ -1,7 +1,7 @@
 use std::iter::Iterator;
 use std::env;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::{PathBuf};
 use ::errors::*;
 
 pub fn src_iter(system: bool, cargo: bool) -> Result<Vec<PathBuf>> {
@@ -29,7 +29,7 @@ pub fn src_iter(system: bool, cargo: bool) -> Result<Vec<PathBuf>> {
         assert!(meta.unwrap().is_dir());
         let repo_path = first.path();
 
-        let mut crate_src_paths = fs::read_dir(repo_path)
+        let crate_src_paths = fs::read_dir(repo_path)
             .chain_err(|| "Couldn't read cargo repo path")?;
 
         for src in crate_src_paths {
@@ -61,7 +61,7 @@ pub fn doc_iter(system: bool, cargo: bool) -> Result<Vec<PathBuf>> {
             bail!("Could not get home directory");
         }
 
-        let mut doc_paths = fs::read_dir(cargo_src_path.as_path())
+        let doc_paths = fs::read_dir(cargo_src_path.as_path())
             .chain_err(|| "Couldn't read cargo source path")?;
 
         for doc in doc_paths {

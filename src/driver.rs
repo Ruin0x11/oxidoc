@@ -1,13 +1,9 @@
 use paths;
 use store::*;
-use generator::{PathSegment, FnDoc, ModPath};
+use generator::{FnDoc, ModPath};
 use ::errors::*;
 use std::collections::HashMap;
-use std::io::{Read, Write};
-use std::fs::File;
 
-
-enum Selector {}
 
 struct FnSig {
     pub scope: ModPath,
@@ -29,6 +25,10 @@ fn parse_name<'a>(name: &String) -> FnSig {
             method: segs.0.iter().last().unwrap().identifier.clone(),
         }
     }
+}
+
+fn render_method() -> Result<()> {
+    Ok(())
 }
 
 pub struct Driver {
@@ -107,9 +107,12 @@ impl Driver {
     fn load_methods_matching(&self, name: String) -> Result<Vec<FnDoc>> {
         let mut found = Vec::new();
         for loc in self.stores_containing(&name).unwrap() {
-            if let Ok(method) = loc.store.load_method(loc) {
-                println!("Found the method {} looking for {}", &method, &name);
-                found.push(method)
+            match loc.store.load_method(loc) {
+                Ok(method) => {
+                    println!("Found the method {} looking for {}", &method, &name);
+                    found.push(method);
+                }
+                Err(mes) => println!("{:?}", mes)
             }
         }
         Ok(found)

@@ -4,22 +4,19 @@ use toml;
 
 use std::fmt;
 use std::fmt::Display;
-use std::collections::HashMap;
 use std::env;
 use std::path::{Path, PathBuf};
-use std::io::{self, Read, Write};
-use std::fs::{create_dir_all, File};
+use std::io::{Read};
+use std::fs::{File};
 
 use syntax::ast;
 use syntax::abi;
 use syntax::print::pprust;
 use syntax::codemap::Spanned;
-use syntax::codemap::{CodeMap, Loc, Span};
+use syntax::codemap::{CodeMap, Span};
 use syntax::diagnostics::plugin::DiagnosticBuilder;
 use syntax::parse::{self, ParseSess};
 use syntax::visit::{self, FnKind, Visitor};
-
-use driver::Driver;
 
 use errors::*;
 
@@ -104,6 +101,11 @@ impl ModPath {
         ModPath(n.0)
     }
 
+    pub fn name(&self) -> PathSegment {
+        let seg = self.0.iter().last();
+        seg.unwrap().clone()
+    }
+
     pub fn join(first: &ModPath, other: &ModPath) -> ModPath {
         let mut result = first.clone();
         result.0.extend(other.0.iter().cloned());
@@ -174,12 +176,8 @@ fn parse<'a, T: ?Sized + AsRef<Path>>(path: &T,
     }
 }
 
-fn fn_to_string(p: &ast::FnDecl) -> String {
-    pprust::to_string(|s| s.print_fn_args_and_ret(p))
-}
-
 pub fn generate(src_dir: String) -> Result<()> {
-    let path = cache_doc_for_crate(&src_dir).
+    cache_doc_for_crate(&src_dir).
         chain_err(|| format!("Unable to generate documentation for directory {}", src_dir))?;
 
     Ok(())
@@ -216,7 +214,6 @@ fn cache_doc_for_crate(crate_path_name: &String) -> Result<()> {
 }
 
 struct RustdocCacher<'a> {
-    arg_counts: HashMap<String, usize>,
     // The codemap is necessary to go from a `Span` to actual line & column
     // numbers for closures.
     codemap: &'a CodeMap,
@@ -225,12 +222,6 @@ struct RustdocCacher<'a> {
 }
 
 impl<'a> RustdocCacher<'a> {
-    fn format_span(&self, span: Span) -> String {
-        format!("{}-{}",
-                format_loc(&self.codemap.lookup_char_pos(span.lo)),
-                format_loc(&self.codemap.lookup_char_pos(span.hi)))
-    }
-
     /// Pushes a segment onto the current path scope.
     pub fn push_path(&mut self, ident: ast::Ident) {
         let seg = PathSegment{ identifier: pprust::ident_to_string(ident) };
@@ -244,10 +235,6 @@ impl<'a> RustdocCacher<'a> {
 
 }
 
-fn format_loc(loc: &Loc) -> String {
-    format!("{}:{}", loc.line, loc.col.0)
-}
-
 impl<'v, 'a> Visitor<'v> for RustdocCacher<'a> {
     //fn visit_fn(&mut self,
     //fk: FnKind<'ast>, fd: &'ast FnDecl, s: Span, _: NodeId) {
@@ -257,8 +244,8 @@ impl<'v, 'a> Visitor<'v> for RustdocCacher<'a> {
                 //block: &'v ast::Block,
                 span: Span,
                 _id: ast::NodeId) {
-        let fn_name = match fn_kind {
-            FnKind::ItemFn(id, gen, unsafety, Spanned{ node: constness, span: span }, abi, visibility, block) => {
+         match fn_kind {
+            FnKind::ItemFn(id, gen, unsafety, Spanned{ node: constness, span: span }, abi, visibility, _) => {
                 let sig = pprust::to_string(|s| s.print_fn(fn_decl, unsafety, constness,
                                                            abi, Some(id), gen, visibility));
 
@@ -298,8 +285,8 @@ impl<'v, 'a> Visitor<'v> for RustdocCacher<'a> {
                     abi::Abi::Unadjusted        => Abi::Unadjusted
                 };
 
-                let my_path = ModPath::join(&self.current_scope,
-                                             &ModPath::from_ident(span, id));
+                let my_path = ModPath::join(&ModPath::from_ident(span, id),
+                                            &self.current_scope);
                 let doc = FnDoc {
                     path: my_path,
                     signature: sig,
@@ -384,7 +371,6 @@ fn generate_doc_cache(krate: &ast::Crate, codemap: &CodeMap, crate_info: CrateIn
         let crate_doc_path = get_crate_doc_path(&crate_info)
             .chain_err(|| format!("Unable to get crate doc path for crate: {}", crate_info.package.name))?;
     let mut visitor = RustdocCacher {
-        arg_counts: HashMap::new(),
         codemap: codemap,
         store: Store::new(crate_doc_path).unwrap(),
         current_scope: ModPath(Vec::new()),
@@ -393,7 +379,5 @@ fn generate_doc_cache(krate: &ast::Crate, codemap: &CodeMap, crate_info: CrateIn
     visitor.visit_mod(&krate.module, krate.span, ast::CRATE_NODE_ID);
 
     visitor.store.save_cache()
-        .chain_err(|| "Couldn't save cache for module");
-
-    Ok(())
+        .chain_err(|| "Couldn't save cache for module")
 }

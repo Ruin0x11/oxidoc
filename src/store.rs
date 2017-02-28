@@ -1,17 +1,12 @@
-use syntax::ast;
-use syntax::print::pprust;
-
 use serde_json;
 
-use std::env;
-use std::ffi::OsStr;
 use std::collections::{HashMap, HashSet};
-use std::path::{Path, PathBuf};
-use std::fs::{create_dir_all, read_dir, File};
+use std::path::{PathBuf};
+use std::fs::{create_dir_all, File};
 use std::io::{Read, Write};
 
 use ::errors::*;
-use generator::{PathSegment, FnDoc, ModPath};
+use generator::{FnDoc, ModPath};
 
 type ProjectName = String;
 type ModuleName = String;
@@ -45,7 +40,7 @@ pub struct Store {
     name: ProjectName,
 
     modules: HashSet<ModuleName>,
-    functions: HashMap<ModuleName, FunctionName>,
+    modules_containing_fns: HashMap<FunctionName, ModuleName>,
 }
 
 impl Store {
@@ -55,8 +50,15 @@ impl Store {
             path: path,
             name: String::new(),
             modules: HashSet::new(),
-            functions: HashMap::new(),
+            modules_containing_fns: HashMap::new(),
         })
+    }
+
+    pub fn friendly_path(&self) -> String {
+        let s = String::new();
+        let last = self.path.iter().last().unwrap();
+        // s.push_str(last.as_str());
+        s
     }
 
     pub fn get_modules(&self) -> &HashSet<ModuleName> {
@@ -111,8 +113,12 @@ impl Store {
 
         // Insert the module name into the list of known module names
         self.modules.insert(fn_doc.path.parent().to_string());
+        self.modules_containing_fns.insert(fn_doc.path.name().identifier.clone(),
+                                           fn_doc.path.parent().to_string());
+        println!("Module {} contains {}", fn_doc.path.name().identifier,
+                 fn_doc.path.parent().to_string());
 
-        println!("Wrote {}", &outfile.display());
+        // println!("Wrote {}", &outfile.display());
 
         Ok(outfile)
     }
