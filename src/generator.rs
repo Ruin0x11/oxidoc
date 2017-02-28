@@ -7,7 +7,7 @@ use std::fmt::Display;
 use std::env;
 use std::path::{Path, PathBuf};
 use std::io::{Read};
-use std::fs::{File};
+use std::fs::{create_dir_all, File};
 
 use syntax::ast;
 use syntax::abi;
@@ -62,7 +62,7 @@ pub enum Abi {
     Unadjusted
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(PartialEq, Eq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct PathSegment {
     /// The identifier portion of this path segment.
     /// Only the string part of the identifier should be needed for the doc.
@@ -78,7 +78,7 @@ impl Display for PathSegment {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(PartialEq, Eq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct ModPath(pub Vec<PathSegment>);
 
 impl ModPath {
@@ -95,12 +95,20 @@ impl ModPath {
         self.0.pop();
     }
 
+    pub fn local_scope(&self) -> ModPath {
+        let mut n = self.clone();
+        n.0.remove(0);
+        ModPath(n.0)
+    }
+
+    /// All but the final segment of the path.
     pub fn parent(&self) -> ModPath {
         let mut n = self.clone();
         n.0.pop();
         ModPath(n.0)
     }
 
+    /// The final segment of the module path
     pub fn name(&self) -> PathSegment {
         let seg = self.0.iter().last();
         seg.unwrap().clone()
@@ -132,20 +140,27 @@ impl Display for ModPath {
 }
 
 /// Holds the name and version of crate for generating doc directory name
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 struct Package {
     name: String,
     version: String,
 }
 
 /// Holds the TOML fields we care about when deserializing
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CrateInfo {
     package: Package,
 }
 
+impl Display for CrateInfo {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}-{}", self.package.name, self.package.version)
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct FnDoc {
+    pub crate_info: CrateInfo,
     pub path: ModPath,
     pub signature: String,
     pub unsafety: Unsafety,
@@ -185,7 +200,7 @@ pub fn generate(src_dir: String) -> Result<()> {
 
 /// Generates cached Rustdoc information for the given crate.
 /// Expects the crate root directory as an argument.
-fn cache_doc_for_crate(crate_path_name: &String) -> Result<()> {
+fn cache_doc_for_crate(crate_path_name: &String) -> Result<(Store)> {
 
     let crate_path = Path::new(crate_path_name.as_str());
     let toml_path = crate_path.join("Cargo.toml");
@@ -219,6 +234,7 @@ struct RustdocCacher<'a> {
     codemap: &'a CodeMap,
     store: Store,
     current_scope: ModPath,
+    crate_info: CrateInfo,
 }
 
 impl<'a> RustdocCacher<'a> {
@@ -244,7 +260,7 @@ impl<'v, 'a> Visitor<'v> for RustdocCacher<'a> {
                 //block: &'v ast::Block,
                 span: Span,
                 _id: ast::NodeId) {
-         match fn_kind {
+        match fn_kind {
             FnKind::ItemFn(id, gen, unsafety, Spanned{ node: constness, span: span }, abi, visibility, _) => {
                 let sig = pprust::to_string(|s| s.print_fn(fn_decl, unsafety, constness,
                                                            abi, Some(id), gen, visibility));
@@ -285,9 +301,10 @@ impl<'v, 'a> Visitor<'v> for RustdocCacher<'a> {
                     abi::Abi::Unadjusted        => Abi::Unadjusted
                 };
 
-                let my_path = ModPath::join(&ModPath::from_ident(span, id),
-                                            &self.current_scope);
+                let my_path = ModPath::join(&self.current_scope,
+                                            &ModPath::from_ident(span, id));
                 let doc = FnDoc {
+                    crate_info: self.crate_info.clone(),
                     path: my_path,
                     signature: sig,
                     unsafety: my_unsafety,
@@ -297,7 +314,7 @@ impl<'v, 'a> Visitor<'v> for RustdocCacher<'a> {
                     abi: my_abi,
                 };
 
-                self.store.write_fn(doc);
+                self.store.add_fn(doc);
             },
             FnKind::Method(id, _, _, _) => {
                 //TODO: This makes sense only in the context of an impl / Trait
@@ -325,7 +342,9 @@ impl<'v, 'a> Visitor<'v> for RustdocCacher<'a> {
         // Keep track of the path we're in as we traverse modules.
         match item.node {
             ast::ItemKind::Mod(_) => {
+                println!("Entering module {}", &item.ident);
                 self.push_path(item.ident);
+                println!("Path: {}", &self.current_scope.to_string())
             },
             _ => (),
         }
@@ -366,18 +385,77 @@ fn get_crate_doc_path(crate_info: &CrateInfo) -> Result<PathBuf> {
     Ok(path)
 }
 
-fn generate_doc_cache(krate: &ast::Crate, codemap: &CodeMap, crate_info: CrateInfo) -> Result<()> {
+fn generate_doc_cache(krate: &ast::Crate, codemap: &CodeMap, crate_info: CrateInfo) -> Result<Store> {
     
-        let crate_doc_path = get_crate_doc_path(&crate_info)
-            .chain_err(|| format!("Unable to get crate doc path for crate: {}", crate_info.package.name))?;
+    let crate_doc_path = get_crate_doc_path(&crate_info)
+        .chain_err(|| format!("Unable to get crate doc path for crate: {}", crate_info.package.name))?;
+
     let mut visitor = RustdocCacher {
         codemap: codemap,
         store: Store::new(crate_doc_path).unwrap(),
         current_scope: ModPath(Vec::new()),
+        crate_info: crate_info.clone(),
     };
+
+    // Push the crate name onto the current namespace so
+    // the module "module" will resolve to "crate::module"
+    visitor.current_scope.push(PathSegment{
+        identifier: crate_info.package.name.clone()
+    });
 
     visitor.visit_mod(&krate.module, krate.span, ast::CRATE_NODE_ID);
 
-    visitor.store.save_cache()
-        .chain_err(|| "Couldn't save cache for module")
+    // TODO: save all to disk once, not as we go
+    visitor.store.save()
+        .chain_err(|| "Couldn't save rd data for module")?;
+
+    Ok(visitor.store)
+}
+
+fn test_harness(s: &str) -> Result<Store> {
+    let parse_session = ParseSess::new();
+    let krate = match parse::parse_crate_from_source_str("test.rs".to_string(), s.to_string(), &parse_session) {
+        Ok(_) if parse_session.span_diagnostic.has_errors() => bail!("Parse error"),
+        Ok(krate) => krate,
+        Err(e) => bail!("Failed to parse"),
+    };
+
+    let crate_info = CrateInfo {
+        package: Package {
+            name: "test".to_string(),
+            version: "1.0.0".to_string(),
+        }
+    };
+
+    generate_doc_cache(&krate, parse_session.codemap(), crate_info)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_has_modules() {
+        let store = test_harness(r#"
+        mod a {
+            mod b {
+            }
+        }"#).unwrap();
+        let modules = store.get_modules();
+        assert!(modules.contains(&ModPath::from("test".to_string())), true);
+        assert!(modules.contains(&ModPath::from("test::a".to_string())), true);
+        assert!(modules.contains(&ModPath::from("test::a::b".to_string())), true);
+    }
+
+    fn test_module_contains_fns() {
+
+        let store = test_harness(r#"
+        mod a {
+            mod b {
+                fn thing() {
+                    println!("Hello, world!");
+                }
+            }
+        }"#).unwrap();
+        let mcf = store.get_modules_containing_fns();
+    }
 }

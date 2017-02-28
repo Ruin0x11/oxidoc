@@ -3,37 +3,67 @@ use store::*;
 use generator::{FnDoc, ModPath};
 use ::errors::*;
 use std::collections::HashMap;
+use std::fmt;
+use std::fmt::Display;
+use generator::PathSegment;
 
-
+#[derive(Eq, PartialEq, Debug)]
 struct FnSig {
-    pub scope: ModPath,
+    pub scope: Option<ModPath>,
     // TODO: selector
     pub method: String,
 }
 
+impl Display for FnSig {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut scope = match self.scope {
+            Some(ref scope) => scope.clone(),
+            None => ModPath(Vec::new())
+        };
+        scope.push(PathSegment{identifier: self.method.clone()});
+
+        write!(f, "{}", scope.to_string())
+    }
+}
 
 fn parse_name<'a>(name: &String) -> FnSig {
     let segs = ModPath::from(name.clone());
     if segs.0.len() == 1 {
         FnSig {
-            scope: ModPath(Vec::new()),
+            scope: None,
             method: segs.0[0].identifier.clone(),
         }
     } else {
         FnSig {
-            scope: segs.parent(),
+            scope: Some(segs.parent()),
             method: segs.0.iter().last().unwrap().identifier.clone(),
         }
     }
 }
 
-fn render_method() -> Result<()> {
+fn render_method(fn_doc: &FnDoc) -> Result<()> {
     Ok(())
+}
+
+fn expand_name(name: &String) -> Result<FnSig> {
+    let segs = ModPath::from(name.clone());
+    let fn_sig = if segs.0.len() == 1 {
+        FnSig {
+            scope: None,
+            method: segs.name().identifier,
+        }
+    } else {
+        FnSig {
+            scope: Some(segs.parent()),
+            method: segs.name().identifier 
+        }
+    };
+    Ok(fn_sig)
 }
 
 pub struct Driver {
     stores: Vec<Store>,
-    stores_with_module: HashMap<String, Vec<usize>>
+    stores_with_module: HashMap<ModPath, Vec<usize>>
 }
 
 impl Driver {
@@ -69,21 +99,14 @@ impl Driver {
 
     pub fn display_names(&self, names: Vec<String>) -> Result<()> {
         for name in names {
-            let name_exp = self.expand_name(name)
+            let fn_sig = expand_name(&name)
                 .chain_err(|| "Failure to display name")?;
-            println!("Name: {}", name_exp);
+            println!("name: {:?}", fn_sig);
+
+            // self.display_name(name_exp)
+            //     .chain_err(|| "No name to display");
         }
         Ok(())
-    }
-
-    fn expand_name(&self, name: String) -> Result<String> {
-        let candidates = self.load_methods_matching(name)?;
-
-        // TODO: Detect if a type prefix is used (:fn)
-
-        // path_segs.iter().fold(String::new(), |res, s| res + &s.identifier)
-        let result = candidates.iter().fold(String::new(), |res, c| res + "\n" + &c.signature.clone() );
-        Ok(result)
     }
 
     fn display_name(&self, name: String) -> Result<()> {
@@ -96,17 +119,29 @@ impl Driver {
     }
 
     fn display_method(&self, name: String) -> Result<()> {
-        // let mut out = Document::new();
+        // TODO: Attempt to filter here for a single match
+        // If no match, list functions that have similar names
+        let fn_docs = self.load_methods_matching(&name).
+            chain_err(|| "No methods match")?;
 
-        // out.add_method(name);
+        println!("= {}", &name);
 
-        // out.display();
+        for fn_doc in fn_docs {
+            // TODO: document construction should happen
+            println!("(from crate {})", fn_doc.crate_info);
+            println!("--------------------");
+            render_method(&fn_doc);
+            println!("--------------------");
+        }
         Ok(())
     }
 
-    fn load_methods_matching(&self, name: String) -> Result<Vec<FnDoc>> {
+    //fn lookup_method(&self, name: String) -> Result<()>
+
+    fn load_methods_matching(&self, name: &String) -> Result<Vec<FnDoc>> {
         let mut found = Vec::new();
-        for loc in self.stores_containing(&name).unwrap() {
+        println!("attempting {}", &name);
+        for loc in self.stores_containing(name).unwrap() {
             match loc.store.load_method(loc) {
                 Ok(method) => {
                     println!("Found the method {} looking for {}", &method, &name);
@@ -120,25 +155,64 @@ impl Driver {
 
     fn stores_containing(&self, name: &String) -> Result<Vec<StoreLoc>> {
         let fn_sig = parse_name(name);
-        let ambiguous = fn_sig.scope.0.is_empty();
 
         let mut stores = Vec::new();
-        if ambiguous {
-            // look through all crate folders
-            let mut v: Vec<usize> = Vec::new();
-            for i in 0..self.stores.len() {
-                stores.push(i);
+        let mut results = Vec::new();
+
+        match fn_sig.scope {
+            None => {
+                // user gave name without path, look through all crate folders and their modules
+                let mut v: Vec<usize> = Vec::new();
+                for i in 0..self.stores.len() {
+                    stores.push(i);
+                }
+
+                for idx in stores {
+                    let store = self.stores.get(idx).unwrap();
+                    for scope in store.get_modules() {
+                        results.push(StoreLoc{
+                            store: store,
+                            scope: scope.clone(),
+                            method: fn_sig.method.clone()
+                        });
+                    }
+                }
+            },
+            Some(scope) => {
+                // fully qualified scope was found, look in that crate's dir only
+                // TODO: Could match against partial scope instead of exact.
+                let stores = self.stores_with_module.get(&scope).unwrap();
+                if !stores.len() == 0 {
+                    let idx = stores.get(0).unwrap();
+                    let store = self.stores.get(*idx).unwrap();
+                    results.push(StoreLoc{
+                        store: store,
+                        scope: scope.clone(),
+                        method: fn_sig.method.clone()
+                    });
+                }
             }
-        } else {
-            // scope was found, look in that crate's dir only
-            stores.extend(self.stores_with_module.get(&fn_sig.scope.to_string()).unwrap());
         };
 
-        let mut results = Vec::new();
-        for store in stores {
-            results.push(StoreLoc{ store: self.stores.get(store).unwrap(), scope: fn_sig.scope.clone(), method: fn_sig.method.clone() })
-        }
-
         Ok(results)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_expand_name() {
+        let s = &"root::a::b".to_string();
+        assert_eq!(expand_name(s).unwrap(), FnSig{
+            scope: Some(ModPath::from("root::a".to_string())),
+            method: "b".to_string()
+        });
+
+        let s = &"run".to_string();
+        assert_eq!(expand_name(s).unwrap(), FnSig{
+            scope: None,
+            method: "run".to_string()
+        });
     }
 }

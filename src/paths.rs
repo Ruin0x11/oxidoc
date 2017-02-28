@@ -54,15 +54,18 @@ pub fn doc_iter(system: bool, cargo: bool) -> Result<Vec<PathBuf>> {
     }
 
     if cargo {
-        let cargo_src_path: PathBuf;
+        let cargo_doc_path: PathBuf;
         if let Some(x) = env::home_dir() {
-            cargo_src_path = x.join(".cargo/registry/doc");
+            cargo_doc_path = x.join(".cargo/registry/doc");
         } else {
             bail!("Could not get home directory");
         }
 
-        let doc_paths = fs::read_dir(cargo_src_path.as_path())
-            .chain_err(|| "Couldn't read cargo source path")?;
+        fs::create_dir_all(&cargo_doc_path.as_path())
+            .chain_err(|| format!("Failed to create doc dir {}", &cargo_doc_path.display()))?;
+
+        let doc_paths = fs::read_dir(cargo_doc_path.as_path())
+            .chain_err(|| "Couldn't read cargo doc path")?;
 
         for doc in doc_paths {
             if let Ok(doc_dir) = doc {
