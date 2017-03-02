@@ -3,7 +3,6 @@ use std::fs;
 use std::path::{PathBuf};
 use ::errors::*;
 
-#[cfg(never)]
 pub fn src_iter(system: bool, cargo: bool) -> Result<Vec<PathBuf>> {
     let mut paths = Vec::new();
 

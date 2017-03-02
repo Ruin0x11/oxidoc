@@ -10,15 +10,18 @@ extern crate error_chain;
 #[macro_use]
 extern crate log;
 extern crate env_logger;
+extern crate pager;
 
 mod generator;
 mod driver;
 mod paths;
 mod store;
 
-use driver::Driver;
-
+use std::path::PathBuf;
 use clap::{App, Arg};
+use pager::Pager;
+
+use driver::Driver;
 
 mod errors {
     // Create the Error, ErrorKind, ResultExt, and Result types
@@ -29,16 +32,16 @@ use errors::*;
 
 fn app<'a, 'b>() -> App<'a, 'b> {
     App::new(format!("rd {}", crate_version!()))
-        .about("The command line interface to Rustdoc.")
+        .about("A command line interface to Rustdoc.")
         .arg(Arg::with_name("version")
              .short("V")
              .long("version")
-             .help("Print version info"))
+             .help("Prints version info"))
         .arg(Arg::with_name("generate")
              .short("g")
              .long("generate")
-             .value_name("GENERATE")
-             .help("Generate rd info for the specified crate")
+             .value_name("CRATE_DIR")
+             .help("Generate rd info for the specified crate root directory, or 'all' to regenerate all")
              .takes_value(true)
              .alias("generate"))
         .arg(Arg::with_name("query")
@@ -47,6 +50,8 @@ fn app<'a, 'b>() -> App<'a, 'b> {
 
 fn main() {
     env_logger::init().unwrap();
+    Pager::new().setup();
+
     if let Err(ref e) = run() {
         error!("error: {}", e);
 
@@ -73,10 +78,15 @@ fn run() -> Result<()> {
 
     if matches.is_present("generate") {
         match matches.value_of("generate") {
+            Some("all") => {
+                return generator::generate_all()
+            }
             Some(x) => {
-                return generator::generate(x.to_string())
+                return generator::generate(PathBuf::from(x))
             },
-            None => bail!("Failed to generate rd info.")
+            None => {
+                bail!("No crate source directory supplied")
+            }
         }
     }
 
