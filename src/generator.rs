@@ -7,7 +7,7 @@ use std::fmt::Display;
 use std::env;
 use std::path::{Path, PathBuf};
 use std::io::{Read};
-use std::fs::{File};
+use std::fs::{File, remove_dir_all};
 
 use syntax::ast;
 use syntax::abi;
@@ -17,6 +17,8 @@ use syntax::codemap::{Span};
 use syntax::diagnostics::plugin::DiagnosticBuilder;
 use syntax::parse::{self, ParseSess};
 use syntax::visit::{self, FnKind, Visitor};
+
+use paths;
 
 use errors::*;
 
@@ -204,18 +206,41 @@ fn parse<'a, T: ?Sized + AsRef<Path>>(path: &T,
     }
 }
 
-pub fn generate(src_dir: String) -> Result<()> {
+pub fn generate_all() -> Result<()> {
+    println!("Regenerating all documentation.");
+
+    let home_dir: PathBuf;
+    if let Some(x) = env::home_dir() {
+        home_dir = x
+    } else {
+        bail!("Could not locate home directory");
+    }
+
+    let path = home_dir.as_path().join(".cargo/registry/doc");
+
+    remove_dir_all(path)
+        .chain_err(|| "Could not remove cargo doc directory")?;
+
+    for src_dir in paths::src_iter(true, true)
+        .chain_err(|| "Could not iterate cargo registry src directories")?
+    {
+        cache_doc_for_crate(&src_dir).
+            chain_err(|| format!("Unable to generate documentation for directory {}", &src_dir.display()))?;
+    }
+    Ok(())
+}
+
+
+pub fn generate(src_dir: PathBuf) -> Result<()> {
     cache_doc_for_crate(&src_dir).
-        chain_err(|| format!("Unable to generate documentation for directory {}", src_dir))?;
+        chain_err(|| format!("Unable to generate documentation for directory {}", &src_dir.display()))?;
 
     Ok(())
 }
 
 /// Generates cached Rustdoc information for the given crate.
 /// Expects the crate root directory as an argument.
-fn cache_doc_for_crate(crate_path_name: &String) -> Result<()> {
-
-    let crate_path = Path::new(crate_path_name.as_str());
+fn cache_doc_for_crate(crate_path: &PathBuf) -> Result<()> {
     let toml_path = crate_path.join("Cargo.toml");
 
     let mut fp = File::open(&toml_path).chain_err(|| format!("Could not find Cargo.toml in path {}", toml_path.display()))?;
@@ -225,6 +250,8 @@ fn cache_doc_for_crate(crate_path_name: &String) -> Result<()> {
 
     let info: CrateInfo = toml::de::from_str(contents).chain_err(|| "Couldn't parse Cargo.toml")?;
 
+    println!("Generating documentation for {}", &info);
+
     let parse_session = ParseSess::new();
 
     // TODO: This has to handle [lib] targets and multiple [[bin]] targets.
@@ -232,7 +259,9 @@ fn cache_doc_for_crate(crate_path_name: &String) -> Result<()> {
     if !main_path.exists() {
         main_path = crate_path.join("src/main.rs");
         if!main_path.exists() {
-            bail!("No crate entry point found (nonstandard paths are unsupported)");
+            // TODO: Look for [lib] / [[bin]] targets here
+            println!("No crate entry point found (nonstandard paths are unsupported)");
+            return Ok(())
         }
     }
     let krate = parse(main_path.as_path(), &parse_session).unwrap();
@@ -343,11 +372,6 @@ impl<'v> Visitor<'v> for RustdocCacher {
         visit::walk_fn(self, fn_kind, fn_decl, span);
     }
 
-    // The default implementation panics, so this is needed to work on files
-    // with macro invocations, eg calls to `format!()` above. A better solution
-    // would be to expand macros before walking the AST, but I haven't looked at
-    // how to do that. We will miss any functions defined via a macro, but
-    // that's fine for this example.
     fn visit_mac(&mut self, _mac: &'v ast::Mac) {
         // TODO: No, it isn't fine...
     }
@@ -374,6 +398,7 @@ impl<'v> Visitor<'v> for RustdocCacher {
     }
 }
 
+/// Obtains the base output path for a crate's documentation.
 fn get_crate_doc_path(crate_info: &CrateInfo) -> Result<PathBuf> {
     let home_dir: PathBuf;
     if let Some(x) = env::home_dir() {
@@ -387,10 +412,17 @@ fn get_crate_doc_path(crate_info: &CrateInfo) -> Result<PathBuf> {
     Ok(path)
 }
 
+/// Generates documentation for the given crate.
 fn generate_doc_cache(krate: &ast::Crate, crate_info: CrateInfo) -> Result<Store> {
-    
+
     let crate_doc_path = get_crate_doc_path(&crate_info)
-        .chain_err(|| format!("Unable to get crate doc path for crate: {}", crate_info.package.name))?;
+        .chain_err(|| format!("Unable to get crate doc path for crate: {}", &crate_info.package.name))?;
+
+    // Clear out old doc path
+    if crate_doc_path.exists() {
+        remove_dir_all(&crate_doc_path)
+            .chain_err(|| format!("Could not remove crate doc directory {}", &crate_doc_path.display()))?;
+    }
 
     let mut visitor = RustdocCacher {
         store: Store::new(crate_doc_path).unwrap(),
@@ -458,7 +490,6 @@ mod tests {
                 }
             }
         }"#).unwrap();
-        let fns = store.get_functions();
-        panic!("not ready")   
+        panic!("not ready")
     }
 }
