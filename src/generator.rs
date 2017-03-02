@@ -153,10 +153,19 @@ impl Display for CrateInfo {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct StructDoc {
+    pub crate_info: CrateInfo,
+    pub path: ModPath,
+    pub signature: String,
+
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct FnDoc {
     pub crate_info: CrateInfo,
     pub path: ModPath,
     pub signature: String,
+
     pub unsafety: Unsafety,
     pub constness: Constness,
     // TODO: Generics
@@ -342,6 +351,8 @@ impl<'v> Visitor<'v> for RustdocCacher {
     fn visit_mac(&mut self, _mac: &'v ast::Mac) {
         // TODO: No, it isn't fine...
     }
+
+    fn visit_
 
     fn visit_item(&mut self, item: &'v ast::Item) {
         // Keep track of the path we're in as we traverse modules.
