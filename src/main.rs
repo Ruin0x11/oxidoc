@@ -85,7 +85,8 @@ fn run() -> Result<()> {
         None => bail!("No search query was provided.")
     };
 
-    let driver = Driver::new();
+    let driver = Driver::new()
+        .chain_err(|| "Couldn't create rd driver")?;
     let mut v = Vec::new();
     v.push(query.to_string());
     driver.display_names(v)

@@ -7,20 +7,20 @@ use std::fmt::Display;
 use std::env;
 use std::path::{Path, PathBuf};
 use std::io::{Read};
-use std::fs::{create_dir_all, File};
+use std::fs::{File};
 
 use syntax::ast;
 use syntax::abi;
 use syntax::print::pprust;
 use syntax::codemap::Spanned;
-use syntax::codemap::{CodeMap, Span};
+use syntax::codemap::{Span};
 use syntax::diagnostics::plugin::DiagnosticBuilder;
 use syntax::parse::{self, ParseSess};
 use syntax::visit::{self, FnKind, Visitor};
 
 use errors::*;
 
-// Since we can't derive Serialize/Deserialize on ast's types.
+// There are redundant enums because we can't derive Serialize/Deserialize on ast's types.
 #[derive(Debug, Serialize, Deserialize)]
 pub enum Unsafety {
     Unsafe,
@@ -95,12 +95,6 @@ impl ModPath {
         self.0.pop();
     }
 
-    pub fn local_scope(&self) -> ModPath {
-        let mut n = self.clone();
-        n.0.remove(0);
-        ModPath(n.0)
-    }
-
     /// All but the final segment of the path.
     pub fn parent(&self) -> ModPath {
         let mut n = self.clone();
@@ -108,7 +102,7 @@ impl ModPath {
         ModPath(n.0)
     }
 
-    /// The final segment of the module path
+    /// The final segment of the path.
     pub fn name(&self) -> PathSegment {
         let seg = self.0.iter().last();
         seg.unwrap().clone()
@@ -172,15 +166,17 @@ pub struct FnDoc {
 
 impl Display for FnDoc {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        // TODO: docstrings are currently not built into the AST.
         let s = format!(r#"
 (from crate {})
+=== {}()
 ------------------------------------------------------------------------------
   {}
 
 ------------------------------------------------------------------------------
 
 Description will go here.
-"#, self.crate_info, self.signature);
+"#, self.crate_info, self.path, self.signature);
         write!(f, "{}", s)
     }
 }
@@ -232,7 +228,7 @@ fn cache_doc_for_crate(crate_path_name: &String) -> Result<()> {
     }
     let krate = parse(main_path.as_path(), &parse_session).unwrap();
 
-    let store = generate_doc_cache(&krate, parse_session.codemap(), info)
+    let store = generate_doc_cache(&krate, info)
         .chain_err(|| "Failed to generate doc cache")?;
 
     // TODO: save all to disk once, not as we go
@@ -240,16 +236,13 @@ fn cache_doc_for_crate(crate_path_name: &String) -> Result<()> {
         .chain_err(|| "Couldn't save rd data for module")
 }
 
-struct RustdocCacher<'a> {
-    // The codemap is necessary to go from a `Span` to actual line & column
-    // numbers for closures.
-    codemap: &'a CodeMap,
+struct RustdocCacher {
     store: Store,
     current_scope: ModPath,
     crate_info: CrateInfo,
 }
 
-impl<'a> RustdocCacher<'a> {
+impl RustdocCacher {
     /// Pushes a segment onto the current path scope.
     pub fn push_path(&mut self, ident: ast::Ident) {
         let seg = PathSegment{ identifier: pprust::ident_to_string(ident) };
@@ -263,7 +256,7 @@ impl<'a> RustdocCacher<'a> {
 
 }
 
-impl<'v, 'a> Visitor<'v> for RustdocCacher<'a> {
+impl<'v> Visitor<'v> for RustdocCacher {
     //fn visit_fn(&mut self,
     //fk: FnKind<'ast>, fd: &'ast FnDecl, s: Span, _: NodeId) {
     fn visit_fn(&mut self,
@@ -273,7 +266,7 @@ impl<'v, 'a> Visitor<'v> for RustdocCacher<'a> {
                 span: Span,
                 _id: ast::NodeId) {
         match fn_kind {
-            FnKind::ItemFn(id, gen, unsafety, Spanned{ node: constness, span: span }, abi, visibility, _) => {
+            FnKind::ItemFn(id, gen, unsafety, Spanned{ node: constness, span: _ }, abi, visibility, _) => {
                 let sig = pprust::to_string(|s| s.print_fn(fn_decl, unsafety, constness,
                                                            abi, Some(id), gen, visibility));
 
@@ -328,7 +321,7 @@ impl<'v, 'a> Visitor<'v> for RustdocCacher<'a> {
 
                 self.store.add_fn(doc);
             },
-            FnKind::Method(id, _, _, _) => {
+            FnKind::Method(_, _, _, _) => {
                 //TODO: This makes sense only in the context of an impl / Trait
                 //id.name.as_str().to_string(),
             },
@@ -383,13 +376,12 @@ fn get_crate_doc_path(crate_info: &CrateInfo) -> Result<PathBuf> {
     Ok(path)
 }
 
-fn generate_doc_cache(krate: &ast::Crate, codemap: &CodeMap, crate_info: CrateInfo) -> Result<Store> {
+fn generate_doc_cache(krate: &ast::Crate, crate_info: CrateInfo) -> Result<Store> {
     
     let crate_doc_path = get_crate_doc_path(&crate_info)
         .chain_err(|| format!("Unable to get crate doc path for crate: {}", crate_info.package.name))?;
 
     let mut visitor = RustdocCacher {
-        codemap: codemap,
         store: Store::new(crate_doc_path).unwrap(),
         current_scope: ModPath(Vec::new()),
         crate_info: crate_info.clone(),
@@ -406,27 +398,28 @@ fn generate_doc_cache(krate: &ast::Crate, codemap: &CodeMap, crate_info: CrateIn
     Ok(visitor.store)
 }
 
-fn test_harness(s: &str) -> Result<Store> {
-    let parse_session = ParseSess::new();
-    let krate = match parse::parse_crate_from_source_str("test.rs".to_string(), s.to_string(), &parse_session) {
-        Ok(_) if parse_session.span_diagnostic.has_errors() => bail!("Parse error"),
-        Ok(krate) => krate,
-        Err(e) => bail!("Failed to parse"),
-    };
-
-    let crate_info = CrateInfo {
-        package: Package {
-            name: "test".to_string(),
-            version: "1.0.0".to_string(),
-        }
-    };
-
-    generate_doc_cache(&krate, parse_session.codemap(), crate_info)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn test_harness(s: &str) -> Result<Store> {
+        let parse_session = ParseSess::new();
+        let krate = match parse::parse_crate_from_source_str("test.rs".to_string(), s.to_string(), &parse_session) {
+            Ok(_) if parse_session.span_diagnostic.has_errors() => bail!("Parse error"),
+            Ok(krate) => krate,
+            Err(_) => bail!("Failed to parse"),
+        };
+
+        let crate_info = CrateInfo {
+            package: Package {
+                name: "test".to_string(),
+                version: "1.0.0".to_string(),
+            }
+        };
+
+        generate_doc_cache(&krate, crate_info)
+    }
+
 
     #[test]
     fn test_has_modules() {

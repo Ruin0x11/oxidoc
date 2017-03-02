@@ -9,7 +9,6 @@ use std::io::{Read, Write};
 use ::errors::*;
 use generator::{FnDoc, ModPath};
 
-type ModuleName = String;
 type FunctionName = String;
 
 #[derive(Debug)]
@@ -26,6 +25,7 @@ pub fn get_full_dir(store_path: &PathBuf , scope: &ModPath) -> PathBuf {
     store_path.join(rest)
 }
 
+/// Gets the .rd output file for a function's documentation
 fn get_fn_file(path: &PathBuf, fn_doc: &FnDoc) -> PathBuf {
     let mut name = String::new();
     name.push_str(&fn_doc.path.name().identifier);
@@ -41,7 +41,7 @@ pub struct Store {
     modules: HashSet<ModPath>,
     functions: HashMap<ModPath, FunctionName>,
 
-    // Documentation data in memory
+    /// Documentation data in memory
     fn_docs: Vec<FnDoc>,
 }
 
@@ -57,21 +57,11 @@ impl Store {
         })
     }
 
-    pub fn friendly_path(&self) -> String {
-        let s = String::new();
-        let last = self.path.iter().last().unwrap();
-        // s.push_str(last.as_str());
-        s
-    }
-
     pub fn get_modules(&self) -> &HashSet<ModPath> {
         &self.modules
     }
 
-    pub fn get_functions(&self) -> &HashMap<ModPath, FunctionName> {
-        &self.functions
-    }
-
+    /// Load the cache for this store, which currently contains the names of all modules.
     pub fn load_cache(&mut self) -> Result<()> {
         let path = self.path.join("cache.rd");
 
@@ -90,14 +80,8 @@ impl Store {
         Ok(())
     }
 
-    // Attempt to load the method at 'loc' from the store.
+    /// Attempt to load the method at 'loc' from the store.
     pub fn load_method(&self, loc: StoreLoc) -> Result<FnDoc> {
-        // The given scope includes the crate name as the first segment
-        // since it's possible to search by "crate::run()" as opposed to just "run()"
-        // so instead of looking at
-        //    ./crate-1.0.0/crate/run.rd
-        // look at
-        //    ./crate-1.0.0/run.rd
         info!("Looking for {} in store {} ", loc.scope, &self.path.display());
         let doc_path = self.path.join(loc.scope.to_path())
             .join(format!("{}.rd", loc.method));
@@ -116,6 +100,7 @@ impl Store {
         Ok(fn_doc)
     }
 
+    /// Adds a function's info to the store in memory.
     pub fn add_fn(&mut self, fn_doc: FnDoc) {
         self.modules.insert(fn_doc.path.parent());
         self.functions.insert(fn_doc.path.parent(),
@@ -148,10 +133,11 @@ impl Store {
 
     /// Saves all documentation data that is in-memory to disk.
     pub fn save(&self) -> Result<()> {
-        fs::create_dir_all(&self.path);
+        fs::create_dir_all(&self.path)
+            .chain_err(|| format!("Unable to create directory {}", &self.path.display()))?;
 
         self.save_cache()
-             .chain_err(|| "Unable to save cache")?;
+            .chain_err(|| format!("Unable to save cache for directory {}", &self.path.display()))?;
 
         for fn_doc in &self.fn_docs {
             self.save_fn(&fn_doc)
@@ -161,6 +147,7 @@ impl Store {
         Ok(())
     }
 
+    /// Saves this store's cached list of module names to disk.
     pub fn save_cache(&self) -> Result<()> {
         let json = serde_json::to_string(&self.modules).unwrap();
 
@@ -169,9 +156,5 @@ impl Store {
         fp.write_all(json.as_bytes()).chain_err(|| format!("Failed to write to method rd file {}", outfile.display()))?;
 
         Ok(())
-    }
-
-    fn lookup_method(&self, name: String) -> Result<String> {
-        bail!("as");
     }
 }

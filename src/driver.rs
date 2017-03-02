@@ -26,21 +26,6 @@ impl Display for FnSig {
     }
 }
 
-fn parse_name<'a>(name: &String) -> FnSig {
-    let segs = ModPath::from(name.clone());
-    if segs.0.len() == 1 {
-        FnSig {
-            scope: None,
-            method: segs.0[0].identifier.clone(),
-        }
-    } else {
-        FnSig {
-            scope: Some(segs.parent()),
-            method: segs.0.iter().last().unwrap().identifier.clone(),
-        }
-    }
-}
-
 fn expand_name(name: &String) -> Result<FnSig> {
     let segs = ModPath::from(name.clone());
     let fn_sig = if segs.0.len() == 1 {
@@ -63,13 +48,13 @@ pub struct Driver {
 }
 
 impl Driver {
-    pub fn new() -> Driver {
+    pub fn new() -> Result<Driver> {
         let mut stores = Vec::new();
         for path in paths::doc_iter(true, true).unwrap() {
             info!("Found store at {}", &path.display());
             let mut store = Store::new(path).unwrap();
             store.load_cache()
-                .chain_err(|| "Failed to load store cache");
+                .chain_err(|| "Failed to load store cache")?;
             stores.push(store);
         }
 
@@ -81,10 +66,10 @@ impl Driver {
             }
         }
 
-        Driver {
+        Ok(Driver {
             stores: stores,
             store_with_module: store_with_module,
-        }
+        })
     }
 
     /// Takes a list of name queries and searches for documentation for each.
@@ -150,7 +135,6 @@ impl Driver {
             None => {
                 info!("Looking through everything");
                 // user gave name without path, look through all crate folders and their modules
-                let mut v: Vec<usize> = Vec::new();
                 for i in 0..self.stores.len() {
                     stores.push(i);
                 }
