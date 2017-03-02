@@ -7,6 +7,9 @@ extern crate serde_json;
 extern crate serde_derive;
 #[macro_use]
 extern crate error_chain;
+#[macro_use]
+extern crate log;
+extern crate env_logger;
 
 mod generator;
 mod driver;
@@ -43,17 +46,18 @@ fn app<'a, 'b>() -> App<'a, 'b> {
 }
 
 fn main() {
+    env_logger::init().unwrap();
     if let Err(ref e) = run() {
-        println!("error: {}", e);
+        error!("error: {}", e);
 
         for e in e.iter().skip(1) {
-            println!("caused by: {}", e);
+            error!("caused by: {}", e);
         }
 
         // The backtrace is not always generated. Try to run this example
         // with `RUST_BACKTRACE=1`.
         if let Some(backtrace) = e.backtrace() {
-            println!("backtrace: {:?}", backtrace);
+            error!("backtrace: {:?}", backtrace);
         }
 
         ::std::process::exit(1);
@@ -85,5 +89,5 @@ fn run() -> Result<()> {
     let mut v = Vec::new();
     v.push(query.to_string());
     driver.display_names(v)
-        .chain_err(|| "don't work")
+        .chain_err(|| "Failed to lookup documentation")
 }

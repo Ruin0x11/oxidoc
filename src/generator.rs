@@ -172,8 +172,16 @@ pub struct FnDoc {
 
 impl Display for FnDoc {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let str = self.path.to_string();
-        write!(f, "{}", str)
+        let s = format!(r#"
+(from crate {})
+------------------------------------------------------------------------------
+  {}
+
+------------------------------------------------------------------------------
+
+Description will go here.
+"#, self.crate_info, self.signature);
+        write!(f, "{}", s)
     }
 }
 
@@ -200,7 +208,7 @@ pub fn generate(src_dir: String) -> Result<()> {
 
 /// Generates cached Rustdoc information for the given crate.
 /// Expects the crate root directory as an argument.
-fn cache_doc_for_crate(crate_path_name: &String) -> Result<(Store)> {
+fn cache_doc_for_crate(crate_path_name: &String) -> Result<()> {
 
     let crate_path = Path::new(crate_path_name.as_str());
     let toml_path = crate_path.join("Cargo.toml");
@@ -224,8 +232,12 @@ fn cache_doc_for_crate(crate_path_name: &String) -> Result<(Store)> {
     }
     let krate = parse(main_path.as_path(), &parse_session).unwrap();
 
-    generate_doc_cache(&krate, parse_session.codemap(), info)
-        .chain_err(|| "Failed to generate doc cache")
+    let store = generate_doc_cache(&krate, parse_session.codemap(), info)
+        .chain_err(|| "Failed to generate doc cache")?;
+
+    // TODO: save all to disk once, not as we go
+    store.save()
+        .chain_err(|| "Couldn't save rd data for module")
 }
 
 struct RustdocCacher<'a> {
@@ -342,9 +354,7 @@ impl<'v, 'a> Visitor<'v> for RustdocCacher<'a> {
         // Keep track of the path we're in as we traverse modules.
         match item.node {
             ast::ItemKind::Mod(_) => {
-                println!("Entering module {}", &item.ident);
                 self.push_path(item.ident);
-                println!("Path: {}", &self.current_scope.to_string())
             },
             _ => (),
         }
@@ -358,18 +368,6 @@ impl<'v, 'a> Visitor<'v> for RustdocCacher<'a> {
             _ => (),
         }
     }
-
-    // fn visit_mod(&mut self, m: &'v ast::Mod, span: Span, node: ast::NodeId) {
-    //     for item in &m.items {
-    //         //let my_path = ModPath::from_ident(span, item.ident);
-    //         // NOTE: Use the ItemKind of an Item to determine if it's doc'ed.
-    //         match item.node {
-    //             ast::ItemKind::Mod(..) => println!("Mod: {}", item.ident),
-    //             _                      => (),
-    //         }
-    //     }
-    //     visit::walk_mod(self, m);
-    // }
 }
 
 fn get_crate_doc_path(crate_info: &CrateInfo) -> Result<PathBuf> {
@@ -405,10 +403,6 @@ fn generate_doc_cache(krate: &ast::Crate, codemap: &CodeMap, crate_info: CrateIn
 
     visitor.visit_mod(&krate.module, krate.span, ast::CRATE_NODE_ID);
 
-    // TODO: save all to disk once, not as we go
-    visitor.store.save()
-        .chain_err(|| "Couldn't save rd data for module")?;
-
     Ok(visitor.store)
 }
 
@@ -434,6 +428,7 @@ fn test_harness(s: &str) -> Result<Store> {
 mod tests {
     use super::*;
 
+    #[test]
     fn test_has_modules() {
         let store = test_harness(r#"
         mod a {
@@ -441,13 +436,16 @@ mod tests {
             }
         }"#).unwrap();
         let modules = store.get_modules();
-        assert!(modules.contains(&ModPath::from("test".to_string())), true);
-        assert!(modules.contains(&ModPath::from("test::a".to_string())), true);
-        assert!(modules.contains(&ModPath::from("test::a::b".to_string())), true);
+        let p = &ModPath::from("test".to_string());
+        assert!(modules.contains(p), true);
+        let p = &ModPath::from("test::a".to_string());
+        assert!(modules.contains(p), true);
+        let p = &ModPath::from("test::a::b".to_string());
+        assert!(modules.contains(p), true);
     }
 
+    #[test]
     fn test_module_contains_fns() {
-
         let store = test_harness(r#"
         mod a {
             mod b {
@@ -456,6 +454,7 @@ mod tests {
                 }
             }
         }"#).unwrap();
-        let mcf = store.get_modules_containing_fns();
+        let fns = store.get_functions();
+        panic!("not ready")   
     }
 }
