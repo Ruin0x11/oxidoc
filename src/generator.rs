@@ -405,7 +405,13 @@ fn get_crate_doc_path(crate_info: &CrateInfo) -> Result<PathBuf> {
 fn generate_doc_cache(krate: &ast::Crate, crate_info: CrateInfo) -> Result<Store> {
 
     let crate_doc_path = get_crate_doc_path(&crate_info)
-        .chain_err(|| format!("Unable to get crate doc path for crate: {}", crate_info.package.name))?;
+        .chain_err(|| format!("Unable to get crate doc path for crate: {}", &crate_info.package.name))?;
+
+    // Clear out old doc path
+    if crate_doc_path.exists() {
+        remove_dir_all(&crate_doc_path)
+            .chain_err(|| format!("Could not remove crate doc directory {}", &crate_doc_path.display()))?;
+    }
 
     let mut visitor = RustdocCacher {
         store: Store::new(crate_doc_path).unwrap(),
