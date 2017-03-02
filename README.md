@@ -47,6 +47,7 @@ The design and output are heavily borrowed from `ri`. Many things still need to 
 - Docstrings (not currently available in the AST)
 - Documentation for crates, traits, constants, modules, structs, etc.
 - Documentation for `std`
+- Tests
 - Fuzzy matching
 - Searching by type signature
 - Filtering by unsafety/trait
