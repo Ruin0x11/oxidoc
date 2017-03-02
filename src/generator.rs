@@ -376,8 +376,6 @@ impl<'v> Visitor<'v> for RustdocCacher {
         // TODO: No, it isn't fine...
     }
 
-    fn visit_
-
     fn visit_item(&mut self, item: &'v ast::Item) {
         // Keep track of the path we're in as we traverse modules.
         match item.node {
