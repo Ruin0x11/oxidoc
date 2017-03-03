@@ -1,13 +1,14 @@
 use serde_json;
 
-use std::fs;
 use std::collections::{HashMap, HashSet};
 use std::path::{PathBuf};
-use std::fs::{create_dir_all, File};
+use std::fs::{self, create_dir_all, File};
+use std::fmt::Display;
 use std::io::{Read, Write};
 
 use ::errors::*;
-use generator::{FnDoc, StructDoc, ModPath};
+use document::{Document, FnDoc, StructDoc, ModPath};
+use paths;
 
 type FunctionName = String;
 
@@ -15,7 +16,7 @@ type FunctionName = String;
 pub struct StoreLoc<'a> {
     pub store: &'a Store,
     pub scope: ModPath,
-    pub function: String,
+    pub identifier: String,
 }   
 
 /// Gets the fully qualified output directory for the current module scope.
@@ -26,20 +27,23 @@ pub fn get_full_dir(store_path: &PathBuf , scope: &ModPath) -> PathBuf {
 }
 
 /// Gets the .odoc output file for a function's documentation
-fn get_fn_docfile(path: &PathBuf, fn_doc: &FnDoc) -> PathBuf {
-    let mut name = String::new();
-    name.push_str(&fn_doc.path.name().identifier);
-    name.push_str(&".odoc");
-    path.join(name)
+fn get_fn_docfile(store_path: &PathBuf, fn_doc: &FnDoc) -> Result<PathBuf> {
+    let parent = fn_doc.path.parent().to_path();
+    let docfile = paths::encode_doc_filename(&fn_doc.path.name().identifier)
+        .chain_err(|| "Could not encode doc filename")?;
+    let name = format!("{}.odoc", docfile);
+    let local_path = parent.join(name);
+    Ok(store_path.join(local_path))
 }
 
 /// Gets the .odoc output file for a function's documentation
-fn get_struct_docfile(path: &PathBuf, struct_doc: &StructDoc) -> PathBuf {
-    let mut name = String::new();
-    name.push_str(&"sdesc-");
-    name.push_str(&struct_doc.path.name().identifier);
-    name.push_str(&".odoc");
-    path.join(name)
+fn get_struct_docfile(store_path: &PathBuf, struct_doc: &StructDoc) -> Result<PathBuf> {
+    let parent = struct_doc.path.parent().to_path();
+    let docfile = paths::encode_doc_filename(&struct_doc.path.name().identifier)
+        .chain_err(|| "Could not encode doc filename")?;
+    let name = format!("sdesc-{}.odoc", docfile);
+    let local_path = parent.join(name);
+    Ok(store_path.join(local_path))
 }
 
 /// A set of Rustdoc documentation for a single crate.
@@ -93,9 +97,11 @@ impl Store {
 
     /// Attempt to load the function at 'loc' from the store.
     pub fn load_function(&self, loc: StoreLoc) -> Result<FnDoc> {
-        info!("Looking for {} in store {} ", loc.scope, &self.path.display());
+        let decoded_name = paths::decode_doc_filename(&loc.identifier)
+            .chain_err(|| format!("Failed to decode StoreLoc identifier {}", loc.identifier))?;
         let doc_path = self.path.join(loc.scope.to_path())
-            .join(format!("{}.odoc", loc.function));
+            .join(format!("{}.odoc", decoded_name));
+        info!("Looking for {}", &doc_path.display());
         let mut fp = File::open(&doc_path)
             .chain_err(|| format!("Couldn't find oxidoc store {}", doc_path.display()))?;
 
@@ -106,13 +112,32 @@ impl Store {
         info!("Loading {}", doc_path.display());
         let fn_doc: FnDoc = serde_json::from_str(&json).unwrap();
 
-        info!("{}\n{}", fn_doc.to_string(), fn_doc.signature);
-
         Ok(fn_doc)
     }
 
+    /// Attempt to load the strucgt at 'loc' from the store.
+    pub fn load_struct(&self, loc: StoreLoc) -> Result<StructDoc> {
+        let decoded_name = paths::decode_doc_filename(&loc.identifier)
+            .chain_err(|| format!("Failed to decode StoreLoc identifier {}", loc.identifier))?;
+        let doc_path = self.path.join(loc.scope.to_path())
+            .join(format!("sdesc-{}.odoc", decoded_name));
+        info!("Looking for {}", &doc_path.display());
+
+        let mut fp = File::open(&doc_path)
+            .chain_err(|| format!("Couldn't find oxidoc store {}", doc_path.display()))?;
+
+        let mut json = String::new();
+        fp.read_to_string(&mut json)
+            .chain_err(|| format!("Couldn't read oxidoc store {}", doc_path.display()))?;
+
+        info!("Loading {}", doc_path.display());
+        let struct_doc: StructDoc = serde_json::from_str(&json).unwrap();
+
+        Ok(struct_doc)
+    }
+
     /// Adds a function's info to the store in memory.
-    pub fn add_fn(&mut self, fn_doc: FnDoc) {
+    pub fn add_function(&mut self, fn_doc: FnDoc) {
         self.modules.insert(fn_doc.path.parent());
         self.functions.insert(fn_doc.path.parent(),
                               fn_doc.path.name().identifier.clone());
@@ -122,7 +147,7 @@ impl Store {
         self.fn_docs.push(fn_doc);
     }
 
-    /// Adds a function's info to the store in memory.
+    /// Adds a struct's info to the store in memory.
     pub fn add_struct(&mut self, struct_doc: StructDoc) {
         self.modules.insert(struct_doc.path.parent());
         self.functions.insert(struct_doc.path.parent(),
@@ -133,20 +158,20 @@ impl Store {
         self.struct_docs.push(struct_doc);
     }
 
-    /// Writes a .odoc JSON store documenting a function to disk.
+    /// Writes a .odoc JSON store documenting a struct to disk.
     pub fn save_struct(&self, struct_doc: &StructDoc) -> Result<PathBuf> {
         let json = serde_json::to_string(&struct_doc).unwrap();
-        let full_path = get_full_dir(&self.path, &struct_doc.path);
 
-        create_dir_all(&full_path)
+        let outfile = get_struct_docfile(&self.path, &struct_doc)
+            .chain_err(|| format!("Could not obtain docfile path inside {}", self.path.display()))?;
+
+        create_dir_all(outfile.parent().unwrap())
             .chain_err(|| format!("Failed to create module dir {}", self.path.display()))?;
 
-        let outfile = get_struct_docfile(&full_path, &struct_doc);
-
         let mut fp = File::create(&outfile)
-            .chain_err(|| format!("Could not write function odoc file {}", outfile.display()))?;
+            .chain_err(|| format!("Could not write struct odoc file {}", outfile.display()))?;
         fp.write_all(json.as_bytes())
-            .chain_err(|| format!("Failed to write to function odoc file {}", outfile.display()))?;
+            .chain_err(|| format!("Failed to write to struct odoc file {}", outfile.display()))?;
 
         // Insert the module name into the list of known module names
 
@@ -158,12 +183,12 @@ impl Store {
     /// Writes a .odoc JSON store documenting a function to disk.
     pub fn save_fn(&self, fn_doc: &FnDoc) -> Result<PathBuf> {
         let json = serde_json::to_string(&fn_doc).unwrap();
-        let full_path = get_full_dir(&self.path, &fn_doc.path);
 
-        create_dir_all(&full_path)
+        let outfile = get_fn_docfile(&self.path, &fn_doc)
+            .chain_err(|| format!("Could not obtain docfile path inside {}", self.path.display()))?;
+
+        create_dir_all(outfile.parent().unwrap())
             .chain_err(|| format!("Failed to create module dir {}", self.path.display()))?;
-
-        let outfile = get_fn_docfile(&full_path, &fn_doc);
 
         let mut fp = File::create(&outfile)
             .chain_err(|| format!("Could not write function odoc file {}", outfile.display()))?;
@@ -185,9 +210,14 @@ impl Store {
         self.save_cache()
             .chain_err(|| format!("Unable to save cache for directory {}", &self.path.display()))?;
 
+        for struct_doc in &self.struct_docs {
+            self.save_struct(&struct_doc)
+                .chain_err(|| format!("Could not save struct doc {}", &struct_doc.path.name()))?;
+        }
+
         for fn_doc in &self.fn_docs {
             self.save_fn(&fn_doc)
-                .chain_err(|| format!("Cannot save fn doc {}", &fn_doc.path.name()))?;
+                .chain_err(|| format!("Could not save function doc {}", &fn_doc.path.name()))?;
         }
 
         Ok(())

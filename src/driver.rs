@@ -1,42 +1,30 @@
 use paths;
 use store::*;
-use generator::{FnDoc, ModPath};
 use ::errors::*;
 use std::collections::HashMap;
 use std::fmt;
 use std::fmt::Display;
-use generator::PathSegment;
+use document::{DocSig, PathSegment, StructDoc, FnDoc, ModPath};
 
-#[derive(Eq, PartialEq, Debug)]
-struct FnSig {
-    pub scope: Option<ModPath>,
-    // TODO: selector
-    pub function: String,
-}
-
-impl Display for FnSig {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let mut scope = match self.scope {
-            Some(ref scope) => scope.clone(),
-            None => ModPath(Vec::new())
-        };
-        scope.push(PathSegment{identifier: self.function.clone()});
-
-        write!(f, "{}", scope.to_string())
+error_chain! {
+    errors {
+        NoDocumentationFound {
+            description("No documentation could be found.")
+        }
     }
 }
 
-fn expand_name(name: &String) -> Result<FnSig> {
+fn expand_name(name: &String) -> Result<DocSig> {
     let segs = ModPath::from(name.clone());
     let fn_sig = if segs.0.len() == 1 {
-        FnSig {
+        DocSig {
             scope: None,
-            function: segs.name().identifier,
+            identifier: segs.name().identifier,
         }
     } else {
-        FnSig {
+        DocSig {
             scope: Some(segs.parent()),
-            function: segs.name().identifier 
+            identifier: segs.name().identifier 
         }
     };
     Ok(fn_sig)
@@ -86,14 +74,36 @@ impl Driver {
     }
 
     /// Takes a name, determines what kind of documentation it is referring to, and displays it.
-    fn display_name(&self, name: &FnSig) -> Result<()> {
-        // TODO: Only functions are currently supported.
-        self.display_function(name)
-            .chain_err(|| format!("No documentation found for {}", &name))
+    fn display_name(&self, name: &DocSig) -> Result<()> {
+        if let Ok(x) = self.display_struct(name) {
+            return Ok(x)
+        }
+
+        if let Ok(x) = self.display_function(name) {
+            return Ok(x)
+        }
+
+        bail!(ErrorKind::NoDocumentationFound)
+    }
+
+    /// Attempts to find a struct named 'name' in the oxidoc stores and print its documentation.
+    fn display_struct(&self, name: &DocSig) -> Result<()> {
+        // TODO: Attempt to filter here for a single match
+        // If no match, list functions that have similar names
+        let struct_docs = self.load_structs_matching(&name).
+            chain_err(|| format!("No structs match the given name {}", &name))?;
+
+        println!("= {}", &name);
+
+        for struct_doc in struct_docs {
+            // TODO: document construction should happen
+            println!("{}", &struct_doc);
+        }
+        Ok(())
     }
 
     /// Attempts to find a fn named 'name' in the oxidoc stores and print its documentation.
-    fn display_function(&self, name: &FnSig) -> Result<()> {
+    fn display_function(&self, name: &DocSig) -> Result<()> {
         // TODO: Attempt to filter here for a single match
         // If no match, list functions that have similar names
         let fn_docs = self.load_functions_matching(&name).
@@ -108,8 +118,23 @@ impl Driver {
         Ok(())
     }
 
+    /// Obtains documentation for structs with the identifier 'name'
+    fn load_structs_matching(&self, name: &DocSig) -> Result<Vec<StructDoc>> {
+        let mut found = Vec::new();
+        for loc in self.stores_containing(name).unwrap() {
+            if let Ok(strukt) = loc.store.load_struct(loc) {
+                info!("Found the struct {} looking for {}", &strukt, &name);
+                found.push(strukt);
+            }
+        }
+        if found.len() == 0 {
+            bail!("No structs matched name {}", name);
+        }
+        Ok(found)
+    }
+
     /// Obtains documentation for functions with the signature 'name'
-    fn load_functions_matching(&self, name: &FnSig) -> Result<Vec<FnDoc>> {
+    fn load_functions_matching(&self, name: &DocSig) -> Result<Vec<FnDoc>> {
         let mut found = Vec::new();
         for loc in self.stores_containing(name).unwrap() {
             if let Ok(function) = loc.store.load_function(loc) {
@@ -123,14 +148,14 @@ impl Driver {
         Ok(found)
     }
 
-    /// Obtains a list of oxidoc stores the function could possibly exist in.
-    fn stores_containing(&self, fn_sig: &FnSig) -> Result<Vec<StoreLoc>> {
+    /// Obtains a list of oxidoc stores the given documentation identifier could possibly exist in.
+    fn stores_containing(&self, sig: &DocSig) -> Result<Vec<StoreLoc>> {
         let mut stores = Vec::new();
         let mut results = Vec::new();
 
-        info!("looking for store that has {}", &fn_sig);
+        info!("looking for store that has {}", &sig);
 
-        match fn_sig.scope {
+        match sig.scope {
             None => {
                 info!("Looking through everything");
                 // user gave name without path, look through all crate folders and their modules
@@ -145,7 +170,7 @@ impl Driver {
                         results.push(StoreLoc{
                             store: store,
                             scope: scope.clone(),
-                            function: fn_sig.function.clone()
+                            identifier: sig.identifier.clone()
                         });
                     }
                 }
@@ -162,7 +187,7 @@ impl Driver {
                         results.push(StoreLoc{
                             store: store,
                             scope: scope.clone(),
-                            function: fn_sig.function.clone()
+                            identifier: sig.identifier.clone()
                         });
                     }
                     None => {
@@ -185,15 +210,15 @@ mod tests {
     #[test]
     fn test_expand_name() {
         let s = &"root::a::b".to_string();
-        assert_eq!(expand_name(s).unwrap(), FnSig{
+        assert_eq!(expand_name(s).unwrap(), DocSig{
             scope: Some(ModPath::from("root::a".to_string())),
-            function: "b".to_string()
+            identifier: "b".to_string()
         });
 
         let s = &"run".to_string();
-        assert_eq!(expand_name(s).unwrap(), FnSig{
+        assert_eq!(expand_name(s).unwrap(), DocSig{
             scope: None,
-            function: "run".to_string()
+            identifier: "run".to_string()
         });
     }
 }

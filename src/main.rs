@@ -12,6 +12,7 @@ extern crate log;
 extern crate env_logger;
 extern crate pager;
 
+mod document;
 mod generator;
 mod driver;
 mod paths;
