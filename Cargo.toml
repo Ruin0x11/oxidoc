@@ -1,6 +1,6 @@
 [package]
-name = "rd"
-version = "0.1.0"
+name = "oxidoc"
+version = "0.1.1"
 authors = ["Ruin0x11"]
 
 [dependencies]

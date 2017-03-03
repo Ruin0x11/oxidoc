@@ -31,7 +31,7 @@ mod errors {
 use errors::*;
 
 fn app<'a, 'b>() -> App<'a, 'b> {
-    App::new(format!("rd {}", crate_version!()))
+    App::new(format!("oxidoc {}", crate_version!()))
         .about("A command line interface to Rustdoc.")
         .arg(Arg::with_name("version")
              .short("V")
@@ -41,7 +41,7 @@ fn app<'a, 'b>() -> App<'a, 'b> {
              .short("g")
              .long("generate")
              .value_name("CRATE_DIR")
-             .help("Generate rd info for the specified crate root directory, or 'all' to regenerate all")
+             .help("Generate oxidoc info for the specified crate root directory, or 'all' to regenerate all")
              .takes_value(true)
              .alias("generate"))
         .arg(Arg::with_name("query")
@@ -50,7 +50,6 @@ fn app<'a, 'b>() -> App<'a, 'b> {
 
 fn main() {
     env_logger::init().unwrap();
-    Pager::new().setup();
 
     if let Err(ref e) = run() {
         error!("error: {}", e);
@@ -72,7 +71,7 @@ fn main() {
 fn run() -> Result<()> {
     let matches = app().get_matches();
     if matches.is_present("version") {
-        println!("rd {}", crate_version!());
+        println!("oxidoc {}", crate_version!());
         return Ok(())
     }
 
@@ -90,13 +89,15 @@ fn run() -> Result<()> {
         }
     }
 
+    Pager::new().setup();
+
     let query = match matches.value_of("query") {
         Some(x) => x,
         None => bail!("No search query was provided.")
     };
 
     let driver = Driver::new()
-        .chain_err(|| "Couldn't create rd driver")?;
+        .chain_err(|| "Couldn't create oxidoc driver")?;
     let mut v = Vec::new();
     v.push(query.to_string());
     driver.display_names(v)

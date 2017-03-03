@@ -271,7 +271,7 @@ fn cache_doc_for_crate(crate_path: &PathBuf) -> Result<()> {
 
     // TODO: save all to disk once, not as we go
     store.save()
-        .chain_err(|| "Couldn't save rd data for module")
+        .chain_err(|| "Couldn't save oxidoc data for module")
 }
 
 struct RustdocCacher {

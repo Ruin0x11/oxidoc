@@ -7,7 +7,7 @@ pub fn src_iter(system: bool, cargo: bool) -> Result<Vec<PathBuf>> {
     let mut paths = Vec::new();
 
     if system {
-        // TODO: push system .rd directory
+        // TODO: push system .odoc directory
     }
 
     if cargo {
@@ -49,7 +49,7 @@ pub fn doc_iter(system: bool, cargo: bool) -> Result<Vec<PathBuf>> {
     let mut paths = Vec::new();
 
     if system {
-        // TODO: push system .rd directory
+        // TODO: push system .odoc directory
     }
 
     if cargo {

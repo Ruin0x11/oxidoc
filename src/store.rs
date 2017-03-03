@@ -25,11 +25,11 @@ pub fn get_full_dir(store_path: &PathBuf , scope: &ModPath) -> PathBuf {
     store_path.join(rest)
 }
 
-/// Gets the .rd output file for a function's documentation
+/// Gets the .odoc output file for a function's documentation
 fn get_fn_file(path: &PathBuf, fn_doc: &FnDoc) -> PathBuf {
     let mut name = String::new();
     name.push_str(&fn_doc.path.name().identifier);
-    name.push_str(&".rd");
+    name.push_str(&".odoc");
     path.join(name)
 }
 
@@ -63,16 +63,16 @@ impl Store {
 
     /// Load the cache for this store, which currently contains the names of all modules.
     pub fn load_cache(&mut self) -> Result<()> {
-        let path = self.path.join("cache.rd");
+        let path = self.path.join("cache.odoc");
 
         let mut fp = File::open(&path)
-            .chain_err(|| format!("Couldn't find rd cache {}", &path.display()))?;
+            .chain_err(|| format!("Couldn't find oxidoc cache {}", &path.display()))?;
 
         let mut json = String::new();
         fp.read_to_string(&mut json)
-            .chain_err(|| format!("Couldn't read rd cache {}", &path.display()))?;
+            .chain_err(|| format!("Couldn't read oxidoc cache {}", &path.display()))?;
 
-        info!("rd: {}", &path.display());
+        info!("odoc: {}", &path.display());
         let module_names: HashSet<ModPath> = serde_json::from_str(&json).unwrap();
         info!("MN: {:?}", &module_names);
         self.modules = module_names;
@@ -84,13 +84,13 @@ impl Store {
     pub fn load_method(&self, loc: StoreLoc) -> Result<FnDoc> {
         info!("Looking for {} in store {} ", loc.scope, &self.path.display());
         let doc_path = self.path.join(loc.scope.to_path())
-            .join(format!("{}.rd", loc.method));
+            .join(format!("{}.odoc", loc.method));
         let mut fp = File::open(&doc_path)
-            .chain_err(|| format!("Couldn't find rd store {}", doc_path.display()))?;
+            .chain_err(|| format!("Couldn't find oxidoc store {}", doc_path.display()))?;
 
         let mut json = String::new();
         fp.read_to_string(&mut json)
-            .chain_err(|| format!("Couldn't read rd store {}", doc_path.display()))?;
+            .chain_err(|| format!("Couldn't read oxidoc store {}", doc_path.display()))?;
 
         info!("Loading {}", doc_path.display());
         let fn_doc: FnDoc = serde_json::from_str(&json).unwrap();
@@ -112,7 +112,7 @@ impl Store {
 
     }
 
-    /// Writes a .rd JSON store documenting a function to disk.
+    /// Writes a .odoc JSON store documenting a function to disk.
     pub fn save_fn(&self, fn_doc: &FnDoc) -> Result<PathBuf> {
         let json = serde_json::to_string(&fn_doc).unwrap();
         let full_path = get_full_dir(&self.path, &fn_doc.path);
@@ -121,8 +121,8 @@ impl Store {
 
         let outfile = get_fn_file(&full_path, &fn_doc);
 
-        let mut fp = File::create(&outfile).chain_err(|| format!("Could not write method rd file {}", outfile.display()))?;
-        fp.write_all(json.as_bytes()).chain_err(|| format!("Failed to write to method rd file {}", outfile.display()))?;
+        let mut fp = File::create(&outfile).chain_err(|| format!("Could not write method odoc file {}", outfile.display()))?;
+        fp.write_all(json.as_bytes()).chain_err(|| format!("Failed to write to method odoc file {}", outfile.display()))?;
 
         // Insert the module name into the list of known module names
 
@@ -151,9 +151,9 @@ impl Store {
     pub fn save_cache(&self) -> Result<()> {
         let json = serde_json::to_string(&self.modules).unwrap();
 
-        let outfile = self.path.join("cache.rd");
+        let outfile = self.path.join("cache.odoc");
         let mut fp = File::create(&outfile).chain_err(|| format!("Could not write cache file {}", outfile.display()))?;
-        fp.write_all(json.as_bytes()).chain_err(|| format!("Failed to write to method rd file {}", outfile.display()))?;
+        fp.write_all(json.as_bytes()).chain_err(|| format!("Failed to write to method odoc file {}", outfile.display()))?;
 
         Ok(())
     }

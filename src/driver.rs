@@ -92,7 +92,7 @@ impl Driver {
             .chain_err(|| format!("No documentation found for {}", &name))
     }
 
-    /// Attempts to find a fn named 'name' in the rd stores and print its documentation.
+    /// Attempts to find a fn named 'name' in the oxidoc stores and print its documentation.
     fn display_method(&self, name: &FnSig) -> Result<()> {
         // TODO: Attempt to filter here for a single match
         // If no match, list functions that have similar names
@@ -123,7 +123,7 @@ impl Driver {
         Ok(found)
     }
 
-    /// Obtains a list of rd stores the method could possibly exist in.
+    /// Obtains a list of oxidoc stores the method could possibly exist in.
     ///  
     fn stores_containing(&self, fn_sig: &FnSig) -> Result<Vec<StoreLoc>> {
         let mut stores = Vec::new();
