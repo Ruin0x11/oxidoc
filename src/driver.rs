@@ -11,7 +11,7 @@ use generator::PathSegment;
 struct FnSig {
     pub scope: Option<ModPath>,
     // TODO: selector
-    pub method: String,
+    pub function: String,
 }
 
 impl Display for FnSig {
@@ -20,7 +20,7 @@ impl Display for FnSig {
             Some(ref scope) => scope.clone(),
             None => ModPath(Vec::new())
         };
-        scope.push(PathSegment{identifier: self.method.clone()});
+        scope.push(PathSegment{identifier: self.function.clone()});
 
         write!(f, "{}", scope.to_string())
     }
@@ -31,12 +31,12 @@ fn expand_name(name: &String) -> Result<FnSig> {
     let fn_sig = if segs.0.len() == 1 {
         FnSig {
             scope: None,
-            method: segs.name().identifier,
+            function: segs.name().identifier,
         }
     } else {
         FnSig {
             scope: Some(segs.parent()),
-            method: segs.name().identifier 
+            function: segs.name().identifier 
         }
     };
     Ok(fn_sig)
@@ -87,17 +87,17 @@ impl Driver {
 
     /// Takes a name, determines what kind of documentation it is referring to, and displays it.
     fn display_name(&self, name: &FnSig) -> Result<()> {
-        // TODO: Only methods are currently supported.
-        self.display_method(name)
+        // TODO: Only functions are currently supported.
+        self.display_function(name)
             .chain_err(|| format!("No documentation found for {}", &name))
     }
 
     /// Attempts to find a fn named 'name' in the oxidoc stores and print its documentation.
-    fn display_method(&self, name: &FnSig) -> Result<()> {
+    fn display_function(&self, name: &FnSig) -> Result<()> {
         // TODO: Attempt to filter here for a single match
         // If no match, list functions that have similar names
-        let fn_docs = self.load_methods_matching(&name).
-            chain_err(|| format!("No methods match the given name {}", &name))?;
+        let fn_docs = self.load_functions_matching(&name).
+            chain_err(|| format!("No functions match the given name {}", &name))?;
 
         println!("= {}", &name);
 
@@ -108,23 +108,22 @@ impl Driver {
         Ok(())
     }
 
-    /// O
-    fn load_methods_matching(&self, name: &FnSig) -> Result<Vec<FnDoc>> {
+    /// Obtains documentation for functions with the signature 'name'
+    fn load_functions_matching(&self, name: &FnSig) -> Result<Vec<FnDoc>> {
         let mut found = Vec::new();
         for loc in self.stores_containing(name).unwrap() {
-            if let Ok(method) = loc.store.load_method(loc) {
-                info!("Found the method {} looking for {}", &method, &name);
-                found.push(method);
+            if let Ok(function) = loc.store.load_function(loc) {
+                info!("Found the function {} looking for {}", &function, &name);
+                found.push(function);
             }
         }
         if found.len() == 0 {
-            bail!("No methods matched name {}", name);
+            bail!("No functions matched name {}", name);
         }
         Ok(found)
     }
 
-    /// Obtains a list of oxidoc stores the method could possibly exist in.
-    ///  
+    /// Obtains a list of oxidoc stores the function could possibly exist in.
     fn stores_containing(&self, fn_sig: &FnSig) -> Result<Vec<StoreLoc>> {
         let mut stores = Vec::new();
         let mut results = Vec::new();
@@ -146,7 +145,7 @@ impl Driver {
                         results.push(StoreLoc{
                             store: store,
                             scope: scope.clone(),
-                            method: fn_sig.method.clone()
+                            function: fn_sig.function.clone()
                         });
                     }
                 }
@@ -163,7 +162,7 @@ impl Driver {
                         results.push(StoreLoc{
                             store: store,
                             scope: scope.clone(),
-                            method: fn_sig.method.clone()
+                            function: fn_sig.function.clone()
                         });
                     }
                     None => {
@@ -188,13 +187,13 @@ mod tests {
         let s = &"root::a::b".to_string();
         assert_eq!(expand_name(s).unwrap(), FnSig{
             scope: Some(ModPath::from("root::a".to_string())),
-            method: "b".to_string()
+            function: "b".to_string()
         });
 
         let s = &"run".to_string();
         assert_eq!(expand_name(s).unwrap(), FnSig{
             scope: None,
-            method: "run".to_string()
+            function: "run".to_string()
         });
     }
 }

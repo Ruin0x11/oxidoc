@@ -7,7 +7,7 @@ use std::fs::{create_dir_all, File};
 use std::io::{Read, Write};
 
 use ::errors::*;
-use generator::{FnDoc, ModPath};
+use generator::{FnDoc, StructDoc, ModPath};
 
 type FunctionName = String;
 
@@ -15,20 +15,29 @@ type FunctionName = String;
 pub struct StoreLoc<'a> {
     pub store: &'a Store,
     pub scope: ModPath,
-    pub method: String,
+    pub function: String,
 }   
 
 /// Gets the fully qualified output directory for the current module scope.
 pub fn get_full_dir(store_path: &PathBuf , scope: &ModPath) -> PathBuf {
-    let rest = scope.parent().to_path();
+    let rest = scope.parent().to_string();
 
     store_path.join(rest)
 }
 
 /// Gets the .odoc output file for a function's documentation
-fn get_fn_file(path: &PathBuf, fn_doc: &FnDoc) -> PathBuf {
+fn get_fn_docfile(path: &PathBuf, fn_doc: &FnDoc) -> PathBuf {
     let mut name = String::new();
     name.push_str(&fn_doc.path.name().identifier);
+    name.push_str(&".odoc");
+    path.join(name)
+}
+
+/// Gets the .odoc output file for a function's documentation
+fn get_struct_docfile(path: &PathBuf, struct_doc: &StructDoc) -> PathBuf {
+    let mut name = String::new();
+    name.push_str(&"sdesc-");
+    name.push_str(&struct_doc.path.name().identifier);
     name.push_str(&".odoc");
     path.join(name)
 }
@@ -43,6 +52,7 @@ pub struct Store {
 
     /// Documentation data in memory
     fn_docs: Vec<FnDoc>,
+    struct_docs: Vec<StructDoc>,
 }
 
 impl Store {
@@ -54,6 +64,7 @@ impl Store {
             functions: HashMap::new(),
 
             fn_docs: Vec::new(),
+            struct_docs: Vec::new(),
         })
     }
 
@@ -80,11 +91,11 @@ impl Store {
         Ok(())
     }
 
-    /// Attempt to load the method at 'loc' from the store.
-    pub fn load_method(&self, loc: StoreLoc) -> Result<FnDoc> {
+    /// Attempt to load the function at 'loc' from the store.
+    pub fn load_function(&self, loc: StoreLoc) -> Result<FnDoc> {
         info!("Looking for {} in store {} ", loc.scope, &self.path.display());
         let doc_path = self.path.join(loc.scope.to_path())
-            .join(format!("{}.odoc", loc.method));
+            .join(format!("{}.odoc", loc.function));
         let mut fp = File::open(&doc_path)
             .chain_err(|| format!("Couldn't find oxidoc store {}", doc_path.display()))?;
 
@@ -109,7 +120,39 @@ impl Store {
                  fn_doc.path.name().identifier);
 
         self.fn_docs.push(fn_doc);
+    }
 
+    /// Adds a function's info to the store in memory.
+    pub fn add_struct(&mut self, struct_doc: StructDoc) {
+        self.modules.insert(struct_doc.path.parent());
+        self.functions.insert(struct_doc.path.parent(),
+                              struct_doc.path.name().identifier.clone());
+        info!("Module {} contains struct {}", struct_doc.path.parent().to_string(),
+                 struct_doc.path.name().identifier);
+
+        self.struct_docs.push(struct_doc);
+    }
+
+    /// Writes a .odoc JSON store documenting a function to disk.
+    pub fn save_struct(&self, struct_doc: &StructDoc) -> Result<PathBuf> {
+        let json = serde_json::to_string(&struct_doc).unwrap();
+        let full_path = get_full_dir(&self.path, &struct_doc.path);
+
+        create_dir_all(&full_path)
+            .chain_err(|| format!("Failed to create module dir {}", self.path.display()))?;
+
+        let outfile = get_struct_docfile(&full_path, &struct_doc);
+
+        let mut fp = File::create(&outfile)
+            .chain_err(|| format!("Could not write function odoc file {}", outfile.display()))?;
+        fp.write_all(json.as_bytes())
+            .chain_err(|| format!("Failed to write to function odoc file {}", outfile.display()))?;
+
+        // Insert the module name into the list of known module names
+
+        info!("Wrote struct doc to {}", &outfile.display());
+
+        Ok(outfile)
     }
 
     /// Writes a .odoc JSON store documenting a function to disk.
@@ -117,12 +160,15 @@ impl Store {
         let json = serde_json::to_string(&fn_doc).unwrap();
         let full_path = get_full_dir(&self.path, &fn_doc.path);
 
-        create_dir_all(&full_path).chain_err(|| format!("Failed to create module dir {}", self.path.display()))?;
+        create_dir_all(&full_path)
+            .chain_err(|| format!("Failed to create module dir {}", self.path.display()))?;
 
-        let outfile = get_fn_file(&full_path, &fn_doc);
+        let outfile = get_fn_docfile(&full_path, &fn_doc);
 
-        let mut fp = File::create(&outfile).chain_err(|| format!("Could not write method odoc file {}", outfile.display()))?;
-        fp.write_all(json.as_bytes()).chain_err(|| format!("Failed to write to method odoc file {}", outfile.display()))?;
+        let mut fp = File::create(&outfile)
+            .chain_err(|| format!("Could not write function odoc file {}", outfile.display()))?;
+        fp.write_all(json.as_bytes())
+            .chain_err(|| format!("Failed to write to function odoc file {}", outfile.display()))?;
 
         // Insert the module name into the list of known module names
 
@@ -153,7 +199,7 @@ impl Store {
 
         let outfile = self.path.join("cache.odoc");
         let mut fp = File::create(&outfile).chain_err(|| format!("Could not write cache file {}", outfile.display()))?;
-        fp.write_all(json.as_bytes()).chain_err(|| format!("Failed to write to method odoc file {}", outfile.display()))?;
+        fp.write_all(json.as_bytes()).chain_err(|| format!("Failed to write to function odoc file {}", outfile.display()))?;
 
         Ok(())
     }

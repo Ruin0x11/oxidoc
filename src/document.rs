@@ -13,8 +13,8 @@ impl Document {
         
     }
 
-    fn add_method(&mut self, name: String) {
-        let result = store::lookup_method(name);
+    fn add_function(&mut self, name: String) {
+        let result = store::lookup_function(name);
 
         
     }

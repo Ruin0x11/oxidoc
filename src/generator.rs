@@ -274,13 +274,14 @@ fn cache_doc_for_crate(crate_path: &PathBuf) -> Result<()> {
         .chain_err(|| "Couldn't save oxidoc data for module")
 }
 
-struct RustdocCacher {
+struct RustdocCacher<'v> {
     store: Store,
     current_scope: ModPath,
     crate_info: CrateInfo,
+    items: Vec<&'v ast::Item>,
 }
 
-impl RustdocCacher {
+impl<'v> RustdocCacher<'v> {
     /// Pushes a segment onto the current path scope.
     pub fn push_path(&mut self, ident: ast::Ident) {
         let seg = PathSegment{ identifier: pprust::ident_to_string(ident) };
@@ -294,7 +295,7 @@ impl RustdocCacher {
 
 }
 
-impl<'v> Visitor<'v> for RustdocCacher {
+impl<'v> Visitor<'v> for RustdocCacher<'v> {
     //fn visit_fn(&mut self,
     //fk: FnKind<'ast>, fd: &'ast FnDecl, s: Span, _: NodeId) {
     fn visit_fn(&mut self,
@@ -346,7 +347,7 @@ impl<'v> Visitor<'v> for RustdocCacher {
 
                 let my_path = ModPath::join(&self.current_scope,
                                             &ModPath::from_ident(span, id));
-                let doc = FnDoc {
+                let fn_doc = FnDoc {
                     crate_info: self.crate_info.clone(),
                     path: my_path,
                     signature: sig,
@@ -357,7 +358,7 @@ impl<'v> Visitor<'v> for RustdocCacher {
                     abi: my_abi,
                 };
 
-                self.store.add_fn(doc);
+                self.store.add_fn(fn_doc);
             },
             FnKind::Method(_, _, _, _) => {
                 //TODO: This makes sense only in the context of an impl / Trait
@@ -365,7 +366,6 @@ impl<'v> Visitor<'v> for RustdocCacher {
             },
             FnKind::Closure(_) => () // Don't care.
         };
-
 
         // Continue walking the rest of the funciton so we pick up any functions
         // or closures defined in its body.
@@ -376,19 +376,41 @@ impl<'v> Visitor<'v> for RustdocCacher {
         // TODO: No, it isn't fine...
     }
 
+    fn visit_variant_data(&mut self, var: &'v ast::VariantData, id: ast::Ident,
+                          _: &'v ast::Generics, node_id: ast::NodeId, span: Span) {
+
+        let my_path = ModPath::join(&self.current_scope,
+                                    &ModPath::from_ident(span, id));
+        let sig = format!("{} {} {{ /* fields omitted */ }}", pprust::visibility_qualified(&self.items.iter().last().unwrap().vis, &"struct"), pprust::ident_to_string(id));
+
+        let struct_doc = StructDoc {
+            crate_info: self.crate_info.clone(),
+            path: my_path,
+            signature: sig,
+        };
+
+        self.store.add_struct(struct_doc);
+
+        visit::walk_struct_def(self, var);
+    }
+
     fn visit_item(&mut self, item: &'v ast::Item) {
         // Keep track of the path we're in as we traverse modules.
         match item.node {
-            ast::ItemKind::Mod(_) => {
+            ast::ItemKind::Mod(_) |
+            ast::ItemKind::Struct(_, _) => {
                 self.push_path(item.ident);
             },
             _ => (),
         }
 
+        self.items.push(item);
         visit::walk_item(self, item);
+        self.items.pop();
 
         match item.node {
-            ast::ItemKind::Mod(_) => {
+            ast::ItemKind::Mod(_) |
+            ast::ItemKind::Struct(_, _) => {
                 self.pop_path()
             },
             _ => (),
@@ -426,6 +448,7 @@ fn generate_doc_cache(krate: &ast::Crate, crate_info: CrateInfo) -> Result<Store
         store: Store::new(crate_doc_path).unwrap(),
         current_scope: ModPath(Vec::new()),
         crate_info: crate_info.clone(),
+        items: Vec::new(),
     };
 
     // Push the crate name onto the current namespace so

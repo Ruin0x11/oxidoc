@@ -16,6 +16,7 @@ mod generator;
 mod driver;
 mod paths;
 mod store;
+mod io_support;
 
 use std::path::PathBuf;
 use clap::{App, Arg};
