@@ -19,12 +19,12 @@ fn expand_name(name: &String) -> Result<DocSig> {
     let fn_sig = if segs.0.len() == 1 {
         DocSig {
             scope: None,
-            identifier: segs.name().identifier,
+            identifier: segs.name().unwrap().identifier,
         }
     } else {
         DocSig {
-            scope: Some(segs.parent()),
-            identifier: segs.name().identifier 
+            scope: Some(segs.parent().unwrap()),
+            identifier: segs.name().unwrap().identifier 
         }
     };
     Ok(fn_sig)
@@ -122,7 +122,7 @@ impl Driver {
     fn load_structs_matching(&self, name: &DocSig) -> Result<Vec<StructDoc>> {
         let mut found = Vec::new();
         for loc in self.stores_containing(name).unwrap() {
-            if let Ok(strukt) = loc.store.load_struct(loc) {
+            if let Ok(strukt) = loc.store.load_struct(&loc.scope, &loc.identifier) {
                 info!("Found the struct {} looking for {}", &strukt, &name);
                 found.push(strukt);
             }
@@ -137,7 +137,7 @@ impl Driver {
     fn load_functions_matching(&self, name: &DocSig) -> Result<Vec<FnDoc>> {
         let mut found = Vec::new();
         for loc in self.stores_containing(name).unwrap() {
-            if let Ok(function) = loc.store.load_function(loc) {
+            if let Ok(function) = loc.store.load_function(&loc.scope, &loc.identifier) {
                 info!("Found the function {} looking for {}", &function, &name);
                 found.push(function);
             }
@@ -204,7 +204,7 @@ impl Driver {
 }
 
 #[cfg(test)]
-mod tests {
+mod test {
     use super::*;
 
     #[test]

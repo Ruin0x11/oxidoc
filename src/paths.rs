@@ -247,7 +247,7 @@ fn is_hex_digit(c: char) -> bool {
 }
 
 #[cfg(test)]
-mod tests {
+mod test {
     use super::*;
 
     #[test]

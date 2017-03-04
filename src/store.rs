@@ -10,8 +10,6 @@ use ::errors::*;
 use document::{Document, FnDoc, StructDoc, ModPath};
 use paths;
 
-type FunctionName = String;
-
 #[derive(Debug)]
 pub struct StoreLoc<'a> {
     pub store: &'a Store,
@@ -21,15 +19,15 @@ pub struct StoreLoc<'a> {
 
 /// Gets the fully qualified output directory for the current module scope.
 pub fn get_full_dir(store_path: &PathBuf , scope: &ModPath) -> PathBuf {
-    let rest = scope.parent().to_string();
+    let rest = scope.parent().unwrap().to_string();
 
     store_path.join(rest)
 }
 
 /// Gets the .odoc output file for a function's documentation
 fn get_fn_docfile(store_path: &PathBuf, fn_doc: &FnDoc) -> Result<PathBuf> {
-    let parent = fn_doc.path.parent().to_path();
-    let docfile = paths::encode_doc_filename(&fn_doc.path.name().identifier)
+    let parent = fn_doc.path.parent().unwrap().to_path();
+    let docfile = paths::encode_doc_filename(&fn_doc.path.name().unwrap().identifier)
         .chain_err(|| "Could not encode doc filename")?;
     let name = format!("{}.odoc", docfile);
     let local_path = parent.join(name);
@@ -38,21 +36,26 @@ fn get_fn_docfile(store_path: &PathBuf, fn_doc: &FnDoc) -> Result<PathBuf> {
 
 /// Gets the .odoc output file for a function's documentation
 fn get_struct_docfile(store_path: &PathBuf, struct_doc: &StructDoc) -> Result<PathBuf> {
-    let parent = struct_doc.path.parent().to_path();
-    let docfile = paths::encode_doc_filename(&struct_doc.path.name().identifier)
+    let parent = struct_doc.path.parent().unwrap().to_path();
+    let docfile = paths::encode_doc_filename(&struct_doc.path.name().unwrap().identifier)
         .chain_err(|| "Could not encode doc filename")?;
     let name = format!("sdesc-{}.odoc", docfile);
     let local_path = parent.join(name);
     Ok(store_path.join(local_path))
 }
 
+type FunctionName = String;
+type StructName = String;
+
 /// A set of Rustdoc documentation for a single crate.
 #[derive(Debug)]
 pub struct Store {
     pub path: PathBuf,
 
+    /// Locations of documentation in the store
     modules: HashSet<ModPath>,
-    functions: HashMap<ModPath, FunctionName>,
+    functions: HashMap<ModPath, HashSet<FunctionName>>,
+    structs: HashMap<ModPath, HashSet<StructName>>,
 
     /// Documentation data in memory
     fn_docs: Vec<FnDoc>,
@@ -66,13 +69,25 @@ impl Store {
             path: path,
             modules: HashSet::new(),
             functions: HashMap::new(),
+            structs: HashMap::new(),
 
             fn_docs: Vec::new(),
             struct_docs: Vec::new(),
         })
     }
 
+    pub fn get_functions(&self, scope: &ModPath) -> Option<&HashSet<FunctionName>> {
+        self.functions.get(scope)
+    }
+
+    pub fn get_structs(&self, scope: &ModPath) -> Option<&HashSet<StructName>> {
+        self.structs.get(scope)
+    }
+
     pub fn get_modules(&self) -> &HashSet<ModPath> {
+        for m in &self.modules {
+            info!("module: {}\n", m);
+        }
         &self.modules
     }
 
@@ -96,10 +111,10 @@ impl Store {
     }
 
     /// Attempt to load the function at 'loc' from the store.
-    pub fn load_function(&self, loc: StoreLoc) -> Result<FnDoc> {
-        let decoded_name = paths::decode_doc_filename(&loc.identifier)
-            .chain_err(|| format!("Failed to decode StoreLoc identifier {}", loc.identifier))?;
-        let doc_path = self.path.join(loc.scope.to_path())
+    pub fn load_function(&self, scope: &ModPath, identifier: &String) -> Result<FnDoc> {
+        let decoded_name = paths::decode_doc_filename(&identifier)
+            .chain_err(|| format!("Failed to decode StoreLoc identifier {}", identifier))?;
+        let doc_path = self.path.join(scope.to_path())
             .join(format!("{}.odoc", decoded_name));
         info!("Looking for {}", &doc_path.display());
         let mut fp = File::open(&doc_path)
@@ -116,11 +131,11 @@ impl Store {
         Ok(fn_doc)
     }
 
-    /// Attempt to load the strucgt at 'loc' from the store.
-    pub fn load_struct(&self, loc: StoreLoc) -> Result<StructDoc> {
-        let decoded_name = paths::decode_doc_filename(&loc.identifier)
-            .chain_err(|| format!("Failed to decode StoreLoc identifier {}", loc.identifier))?;
-        let doc_path = self.path.join(loc.scope.to_path())
+    /// Attempt to load the struct at 'loc' from the store.
+    pub fn load_struct(&self, scope: &ModPath, identifier: &String) -> Result<StructDoc> {
+        let decoded_name = paths::decode_doc_filename(&identifier)
+            .chain_err(|| format!("Failed to decode StoreLoc identifier {}", identifier))?;
+        let doc_path = self.path.join(scope.to_path())
             .join(format!("sdesc-{}.odoc", decoded_name));
         info!("Looking for {}", &doc_path.display());
 
@@ -140,22 +155,61 @@ impl Store {
 
     /// Adds a function's info to the store in memory.
     pub fn add_function(&mut self, fn_doc: FnDoc) {
-        self.modules.insert(fn_doc.path.parent());
-        self.functions.insert(fn_doc.path.parent(),
-                              fn_doc.path.name().identifier.clone());
-        info!("Module {} contains fn {}", fn_doc.path.parent().to_string(),
-                 fn_doc.path.name().identifier);
+        self.add_all_modules(&fn_doc.path);
+
+        let parent = fn_doc.path.parent().unwrap();
+
+        if let Some(list) = self.functions.get_mut(&parent) {
+            let identifier = fn_doc.path.name().unwrap().identifier.clone();
+            list.insert(identifier);
+        }
+        if let None = self.functions.get(&parent) {
+            let identifier = fn_doc.path.name().unwrap().identifier.clone();
+            let mut s = HashSet::new();
+            s.insert(identifier);
+            self.functions.insert(parent, s);
+        }
+
+        info!("Module {} contains fn {}", fn_doc.path.parent().unwrap().to_string(),
+                 fn_doc.path.name().unwrap().identifier);
 
         self.fn_docs.push(fn_doc);
     }
 
+    /// Add a module's path to the list of known modules in this store.
+    pub fn add_module(&mut self, scope: ModPath) {
+        info!("Add Module: {}", scope);
+        self.modules.insert(scope);
+    }
+
+    fn add_all_modules(&mut self, scope: &ModPath) {
+        let mut parent = scope.parent();
+        while let Some(path) = parent {
+            info!("Add module path {}", &path);
+            parent = path.parent();
+            self.modules.insert(path);
+        }
+    }
+
     /// Adds a struct's info to the store in memory.
     pub fn add_struct(&mut self, struct_doc: StructDoc) {
-        self.modules.insert(struct_doc.path.parent());
-        self.functions.insert(struct_doc.path.parent(),
-                              struct_doc.path.name().identifier.clone());
-        info!("Module {} contains struct {}", struct_doc.path.parent().to_string(),
-                 struct_doc.path.name().identifier);
+        self.add_all_modules(&struct_doc.path);
+
+        let parent = struct_doc.path.parent().unwrap();
+
+        if let Some(list) = self.structs.get_mut(&parent) {
+            let identifier = struct_doc.path.name().unwrap().identifier.clone();
+            list.insert(identifier);
+        }
+        if let None = self.structs.get(&parent) {
+            let identifier = struct_doc.path.name().unwrap().identifier.clone();
+            let mut s = HashSet::new();
+            s.insert(identifier);
+            self.structs.insert(parent, s);
+        }
+
+        info!("Module {} contains struct {}", struct_doc.path.parent().unwrap().to_string(),
+                 struct_doc.path.name().unwrap().identifier);
 
         self.struct_docs.push(struct_doc);
     }
@@ -214,12 +268,12 @@ impl Store {
 
         for struct_doc in &self.struct_docs {
             self.save_struct(&struct_doc)
-                .chain_err(|| format!("Could not save struct doc {}", &struct_doc.path.name()))?;
+                .chain_err(|| format!("Could not save struct doc {}", &struct_doc.path.name().unwrap()))?;
         }
 
         for fn_doc in &self.fn_docs {
             self.save_fn(&fn_doc)
-                .chain_err(|| format!("Could not save function doc {}", &fn_doc.path.name()))?;
+                .chain_err(|| format!("Could not save function doc {}", &fn_doc.path.name().unwrap()))?;
         }
 
         Ok(())

@@ -112,14 +112,21 @@ struct RustdocCacher<'v> {
 }
 
 impl<'v> RustdocCacher<'v> {
+    /// Pushes a path onto the current path scope.
+    pub fn push_path(&mut self, scope: ModPath) {
+        for seg in scope.0.iter() {
+            self.current_scope.push(seg.clone());
+        }
+    }
+
     /// Pushes a segment onto the current path scope.
-    pub fn push_path(&mut self, name: String) {
+    pub fn push_segment(&mut self, name: String) {
         let seg = PathSegment{ identifier: name };
         self.current_scope.push(seg);
     }
 
     /// Pops a segment from the current path scope.
-    pub fn pop_path(&mut self) {
+    pub fn pop_segment(&mut self) {
         self.current_scope.pop();
     }
 
@@ -182,8 +189,10 @@ impl<'v> RustdocCacher<'v> {
 
                 // Save the name of the struct inside the documentation path
                 // if the function is inside that struct's impl
+                // The name itself can have a module path like "module::Struct"
+                // if "impl module::Struct" is given
                 if part_of_impl {
-                    self.push_path(name.clone());
+                    self.push_path(ModPath::from(name.clone()));
                 }
 
                 let visibility = match vis {
@@ -213,7 +222,9 @@ impl<'v> RustdocCacher<'v> {
                 });
 
                 if part_of_impl {
-                    self.pop_path();
+                    for _ in 0..ModPath::from(name.clone()).0.len() {
+                        self.pop_segment();
+                    }
                 }
 
                 fn_doc
@@ -272,9 +283,13 @@ impl<'v> Visitor<'v> for RustdocCacher<'v> {
     fn visit_item(&mut self, item: &'v ast::Item) {
         // Keep track of the path we're in as we traverse modules.
         match item.node {
-            ast::ItemKind::Mod(_) |
+            ast::ItemKind::Mod(_) => {
+                self.push_segment(pprust::ident_to_string(item.ident));
+                self.items.push(item);
+                self.store.add_module(self.current_scope.clone());
+            },
             ast::ItemKind::Struct(_, _) => {
-                self.push_path(pprust::ident_to_string(item.ident));
+                self.push_segment(pprust::ident_to_string(item.ident));
                 self.items.push(item);
             },
             ast::ItemKind::Impl(_, _, _, _, _, _) |
@@ -291,7 +306,7 @@ impl<'v> Visitor<'v> for RustdocCacher<'v> {
             ast::ItemKind::Mod(_) |
             ast::ItemKind::Struct(_, _) => {
                 self.items.pop();
-                self.pop_path()
+                self.pop_segment()
             }
             ast::ItemKind::Impl(_, _, _, _, _, _) |
             ast::ItemKind::DefaultImpl(_, _) => {
@@ -341,14 +356,18 @@ fn generate_doc_cache(krate: &ast::Crate, crate_info: CrateInfo) -> Result<Store
         identifier: crate_info.package.name.clone()
     });
 
+    // Also add the crate's namespace as a known documentation path
+    visitor.store.add_module(visitor.current_scope.clone());
+
     visitor.visit_mod(&krate.module, krate.span, ast::CRATE_NODE_ID);
 
     Ok(visitor.store)
 }
 
 #[cfg(test)]
-mod tests {
+mod test {
     use super::*;
+    use env_logger;
 
     fn test_harness(s: &str) -> Result<Store> {
         let parse_session = ParseSess::new();
@@ -371,6 +390,7 @@ mod tests {
 
     #[test]
     fn test_has_modules() {
+        let _ = env_logger::init();
         let store = test_harness(r#"
         mod a {
             mod b {
@@ -378,23 +398,48 @@ mod tests {
         }"#).unwrap();
         let modules = store.get_modules();
         let p = &ModPath::from("test".to_string());
-        assert!(modules.contains(p), true);
-        // let p = &ModPath::from("test::a".to_string());
-        // assert!(modules.contains(p), true);
-        // let p = &ModPath::from("test::a::b".to_string());
-        // assert!(modules.contains(p), true);
+        assert!(modules.contains(p));
+        let p = &ModPath::from("test::a".to_string());
+        assert!(modules.contains(p));
+        let p = &ModPath::from("test::a::b".to_string());
+        assert!(modules.contains(p));
     }
 
     #[test]
-    fn test_module_contains_fns() {
+    fn test_module_has_fns() {
+        let _ = env_logger::init();
         let store = test_harness(r#"
+        fn main() {
+          println!("inside main");
+        }
         mod a {
             mod b {
                 fn thing() {
                     println!("Hello, world!");
                 }
+                struct Mine(u32);
+                impl Mine {
+                    fn print_val(&self) {
+                        println!("{}", self.0);
+                    }
+                }
+            }
+            impl b::Mine {
+                fn print_val_plus_two(&self) {
+                    println!("{}", self.0 + 2);
+                }
             }
         }"#).unwrap();
-        panic!("not ready")
+        let functions = store.get_functions(&ModPath::from("test::a::b".to_string())).unwrap();
+        let f = &"thing".to_string();
+        assert!(functions.contains(f));
+        let functions = store.get_functions(&ModPath::from("test".to_string())).unwrap();
+        let f = &"main".to_string();
+        assert!(functions.contains(f));
+        let functions = store.get_functions(&ModPath::from("test::a::b::Mine".to_string())).unwrap();
+        let f = &"print_val".to_string();
+        assert!(functions.contains(f));
+        let f = &"print_val_plus_two".to_string();
+        assert!(functions.contains(f));
     }
 }

@@ -174,16 +174,22 @@ impl ModPath {
     }
 
     /// All but the final segment of the path.
-    pub fn parent(&self) -> ModPath {
+    pub fn parent(&self) -> Option<ModPath> {
         let mut n = self.clone();
-        n.0.pop();
-        ModPath(n.0)
+        if let Some(_) = n.0.pop() {
+            Some(ModPath(n.0))
+        } else {
+            None
+        }
     }
 
     /// The final segment of the path.
-    pub fn name(&self) -> PathSegment {
-        let seg = self.0.iter().last();
-        seg.unwrap().clone()
+    pub fn name(&self) -> Option<PathSegment> {
+        if let Some(seg) = self.0.iter().last() {
+            Some(seg.clone())
+        } else {
+            None
+        }
     }
 
     pub fn join(first: &ModPath, other: &ModPath) -> ModPath {
