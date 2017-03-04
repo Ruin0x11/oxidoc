@@ -151,7 +151,7 @@ impl<'v> RustdocCacher<'v> {
                 //TODO: This makes sense only in the context of an impl / Trait
                 println!("METHOD: {}", pprust::ident_to_string(id));
 
-                let my_path = ModPath::join(&self.current_scope, &ModPath::from_ident(span, id));
+                let mut part_of_impl = false;
 
                 let mut name: String = String::new();
                 let my_ty = if let Some(item) = self.items.iter().last() {
@@ -167,6 +167,7 @@ impl<'v> RustdocCacher<'v> {
                         },
                         ast::ItemKind::Impl(_, _, _, _, ref ty, _) => {
                             name = pprust::ty_to_string(ty);
+                            part_of_impl = true;
                             println!("Method on impl {}", &name);
                             FnKind::MethodFromImpl
                         }
@@ -179,7 +180,9 @@ impl<'v> RustdocCacher<'v> {
                     FnKind::ItemFn
                 };
 
-                if !name.len() == 0 {
+                // Save the name of the struct inside the documentation path
+                // if the function is inside that struct's impl
+                if part_of_impl {
                     self.push_path(name.clone());
                 }
 
@@ -192,6 +195,7 @@ impl<'v> RustdocCacher<'v> {
                     }
                 };
 
+                let my_path = ModPath::join(&self.current_scope, &ModPath::from_ident(span, id));
                 println!("PATH: {}", my_path);
 
                 let sig = pprust::to_string(|s| s.print_method_sig(id, &m, &visibility));
@@ -208,7 +212,7 @@ impl<'v> RustdocCacher<'v> {
                     ty: my_ty,
                 });
 
-                if !name.len() == 0 {
+                if part_of_impl {
                     self.pop_path();
                 }
 
@@ -276,7 +280,6 @@ impl<'v> Visitor<'v> for RustdocCacher<'v> {
             ast::ItemKind::Impl(_, _, _, _, _, _) |
             ast::ItemKind::DefaultImpl(_, _) => {
                 // TODO: Need to record the trait the impl is from and the type it is on
-                self.push_path(pprust::ident_to_string(item.ident));
                 self.items.push(item);
             }
             _ => (),
@@ -286,11 +289,13 @@ impl<'v> Visitor<'v> for RustdocCacher<'v> {
 
         match item.node {
             ast::ItemKind::Mod(_) |
-            ast::ItemKind::Struct(_, _) |
+            ast::ItemKind::Struct(_, _) => {
+                self.items.pop();
+                self.pop_path()
+            }
             ast::ItemKind::Impl(_, _, _, _, _, _) |
             ast::ItemKind::DefaultImpl(_, _) => {
                 self.items.pop();
-                self.pop_path()
             }
             _ => (),
         }
@@ -372,8 +377,8 @@ mod tests {
             }
         }"#).unwrap();
         let modules = store.get_modules();
-        // let p = &ModPath::from("test".to_string());
-        // assert!(modules.contains(p), true);
+        let p = &ModPath::from("test".to_string());
+        assert!(modules.contains(p), true);
         // let p = &ModPath::from("test::a".to_string());
         // assert!(modules.contains(p), true);
         // let p = &ModPath::from("test::a::b".to_string());
