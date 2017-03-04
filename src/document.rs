@@ -1,9 +1,11 @@
 use std::fmt::{self, Display};
 use std::path::{Path, PathBuf};
 use syntax::ast;
+use syntax::abi;
 use syntax::codemap::Spanned;
 use syntax::codemap::{Span};
 use syntax::print::pprust;
+use syntax::visit;
 
 use ::errors::*;
 
@@ -41,16 +43,45 @@ pub enum Unsafety {
     Normal,
 }
 
+impl From<ast::Unsafety> for Unsafety {
+    fn from(uns: ast::Unsafety) -> Unsafety {
+        match uns {
+            ast::Unsafety::Normal => Unsafety::Normal,
+            ast::Unsafety::Unsafe => Unsafety::Unsafe,
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub enum Constness {
     Const,
     NotConst,
 }
 
+impl From<ast::Constness> for Constness {
+    fn from(con: ast::Constness) -> Constness {
+        match con {
+            ast::Constness::Const    => Constness::Const,
+            ast::Constness::NotConst => Constness::NotConst,
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub enum Visibility {
     Public,
-    Private
+    Private,
+    Inherited,
+}
+
+impl From<ast::Visibility> for Visibility{
+    fn from(vis: ast::Visibility) -> Visibility {
+        match vis {
+            ast::Visibility::Public    => Visibility::Public,
+            ast::Visibility::Inherited => Visibility::Inherited,
+            _                          => Visibility::Private,
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -74,6 +105,37 @@ pub enum Abi {
     RustCall,
     PlatformIntrinsic,
     Unadjusted
+}
+
+impl From<abi::Abi> for Abi {
+    fn from(abi: abi::Abi) -> Abi {
+        match abi {
+            abi::Abi::Cdecl             => Abi::Cdecl,
+            abi::Abi::Stdcall           => Abi::Stdcall,
+            abi::Abi::Fastcall          => Abi::Fastcall,
+            abi::Abi::Vectorcall        => Abi::Vectorcall,
+            abi::Abi::Aapcs             => Abi::Aapcs,
+            abi::Abi::Win64             => Abi::Win64,
+            abi::Abi::SysV64            => Abi::SysV64,
+            abi::Abi::PtxKernel         => Abi::PtxKernel,
+            abi::Abi::Msp430Interrupt   => Abi::Msp430Interrupt,
+            abi::Abi::Rust              => Abi::Rust,
+            abi::Abi::C                 => Abi::C,
+            abi::Abi::System            => Abi::System,
+            abi::Abi::RustIntrinsic     => Abi::RustIntrinsic,
+            abi::Abi::RustCall          => Abi::RustCall,
+            abi::Abi::PlatformIntrinsic => Abi::PlatformIntrinsic,
+            abi::Abi::Unadjusted        => Abi::Unadjusted
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub enum FnKind {
+    ItemFn,
+    Method,
+    MethodFromImpl,
+    MethodFromTrait,
 }
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug, Serialize, Deserialize)]
@@ -102,9 +164,11 @@ impl ModPath {
                 |seg| PathSegment { identifier: pprust::ident_to_string(seg.identifier) }).collect()
         )
     }
+
     pub fn push(&mut self, seg: PathSegment) {
         self.0.push(seg);
     }
+
     pub fn pop(&mut self) {
         self.0.pop();
     }
@@ -218,21 +282,28 @@ pub struct FnDoc {
     // TODO: Generics
     pub visibility: Visibility,
     pub abi: Abi,
+    pub ty: FnKind,
 }
 
 impl Document for FnDoc {
     fn render(&self, f: &mut fmt::Formatter) -> fmt::Result {
         // TODO: docstrings are currently not built into the AST.
+        let info = match self.ty {
+            FnKind::ItemFn => format!("{}()", self.path),
+            FnKind::Method => format!("(impl on {})", self.path),
+            FnKind::MethodFromImpl => format!("(impl on {})", self.path),
+            FnKind::MethodFromTrait => format!("<from trait>"),
+        };
         write!(f, r#"
 (from crate {})
-=== {}()
+=== {}
 ------------------------------------------------------------------------------
   {}
 
 ------------------------------------------------------------------------------
 
 {}
-"#, self.crate_info, self.path, self.signature, "<Docstring will go here.>")
+"#, self.crate_info, info, self.signature, "<Docstring will go here.>")
     }
 }
 

@@ -15,7 +15,7 @@ use syntax::codemap::Spanned;
 use syntax::codemap::{Span};
 use syntax::diagnostics::plugin::DiagnosticBuilder;
 use syntax::parse::{self, ParseSess};
-use syntax::visit::{self, FnKind, Visitor};
+use syntax::visit::{self, Visitor};
 
 use paths;
 use document::*;
@@ -113,8 +113,8 @@ struct RustdocCacher<'v> {
 
 impl<'v> RustdocCacher<'v> {
     /// Pushes a segment onto the current path scope.
-    pub fn push_path(&mut self, ident: ast::Ident) {
-        let seg = PathSegment{ identifier: pprust::ident_to_string(ident) };
+    pub fn push_path(&mut self, name: String) {
+        let seg = PathSegment{ identifier: name };
         self.current_scope.push(seg);
     }
 
@@ -123,79 +123,116 @@ impl<'v> RustdocCacher<'v> {
         self.current_scope.pop();
     }
 
+    /// Possibly generates function documentation for the given AST info, or not if it's a closure.
+    pub fn convert_fn(&mut self, span: Span,
+               fn_kind: visit::FnKind<'v>, fn_decl: &'v ast::FnDecl) -> Option<FnDoc> {
+
+        match fn_kind {
+            visit::FnKind::ItemFn(id, gen, unsafety,
+                                  Spanned{ node: constness, span: _ }, abi, visibility, _) => {
+                let sig = pprust::to_string(|s| s.print_fn(fn_decl, unsafety, constness,
+                                                           abi, Some(id), gen, visibility));
+
+                let my_path = ModPath::join(&self.current_scope, &ModPath::from_ident(span, id));
+
+                Some(FnDoc {
+                    crate_info: self.crate_info.clone(),
+                    path: my_path,
+                    signature: sig,
+                    unsafety: Unsafety::from(unsafety),
+                    constness: Constness::from(constness),
+                    // TODO: Generics
+                    visibility: Visibility::from(visibility.clone()),
+                    abi: Abi::from(abi),
+                    ty: FnKind::ItemFn,
+                })
+            },
+            visit::FnKind::Method(id, m, vis, block) => {
+                //TODO: This makes sense only in the context of an impl / Trait
+                println!("METHOD: {}", pprust::ident_to_string(id));
+
+                let my_path = ModPath::join(&self.current_scope, &ModPath::from_ident(span, id));
+
+                let mut name: String = String::new();
+                let my_ty = if let Some(item) = self.items.iter().last() {
+                    match item.node {
+                        ast::ItemKind::Mod(_) |
+                        ast::ItemKind::Struct(_, _) => {
+                            println!("Method inside scope");
+                            FnKind::Method   
+                        },
+                        ast::ItemKind::DefaultImpl(_, _) => {
+                            println!("Method on default impl");
+                            FnKind::MethodFromTrait   
+                        },
+                        ast::ItemKind::Impl(_, _, _, _, ref ty, _) => {
+                            name = pprust::ty_to_string(ty);
+                            println!("Method on impl {}", &name);
+                            FnKind::MethodFromImpl
+                        }
+                        _ => {
+                            println!("Something else");
+                            FnKind::ItemFn
+                        },
+                    }
+                } else {
+                    FnKind::ItemFn
+                };
+
+                if !name.len() == 0 {
+                    self.push_path(name.clone());
+                }
+
+                let visibility = match vis {
+                    Some(v) => {
+                        v.clone()
+                    }
+                    None => {
+                        ast::Visibility::Inherited
+                    }
+                };
+
+                println!("PATH: {}", my_path);
+
+                let sig = pprust::to_string(|s| s.print_method_sig(id, &m, &visibility));
+
+                let fn_doc = Some(FnDoc {
+                    crate_info: self.crate_info.clone(),
+                    path: my_path,
+                    signature: sig,
+                    unsafety: Unsafety::from(m.unsafety),
+                    constness: Constness::from(m.constness.node),
+                    // TODO: Generics
+                    visibility: Visibility::from(visibility),
+                    abi: Abi::from(m.abi),
+                    ty: my_ty,
+                });
+
+                if !name.len() == 0 {
+                    self.pop_path();
+                }
+
+                fn_doc
+
+            },
+            visit::FnKind::Closure(_) => None // Don't care.
+        }
+    }
+
 }
 
 impl<'v> Visitor<'v> for RustdocCacher<'v> {
     //fn visit_fn(&mut self,
     //fk: FnKind<'ast>, fd: &'ast FnDecl, s: Span, _: NodeId) {
     fn visit_fn(&mut self,
-                fn_kind: FnKind<'v>,
+                fn_kind: visit::FnKind<'v>,
                 fn_decl: &'v ast::FnDecl,
                 //block: &'v ast::Block,
                 span: Span,
                 _id: ast::NodeId) {
-        match fn_kind {
-            FnKind::ItemFn(id, gen, unsafety, Spanned{ node: constness, span: _ }, abi, visibility, _) => {
-                let sig = pprust::to_string(|s| s.print_fn(fn_decl, unsafety, constness,
-                                                           abi, Some(id), gen, visibility));
-
-                // convert ast types to our Serializable types.
-
-                let my_unsafety = match unsafety {
-                    ast::Unsafety::Normal => Unsafety::Normal,
-                    ast::Unsafety::Unsafe => Unsafety::Unsafe,
-                };
-
-                let my_constness = match constness {
-                    ast::Constness::Const    => Constness::Const,
-                    ast::Constness::NotConst => Constness::NotConst,
-                };
-
-                let my_visibility = match *visibility {
-                    ast::Visibility::Public => Visibility::Public,
-                    _                       => Visibility::Private,
-                };
-
-                let my_abi = match abi {
-                    abi::Abi::Cdecl             => Abi::Cdecl,
-                    abi::Abi::Stdcall           => Abi::Stdcall,
-                    abi::Abi::Fastcall          => Abi::Fastcall,
-                    abi::Abi::Vectorcall        => Abi::Vectorcall,
-                    abi::Abi::Aapcs             => Abi::Aapcs,
-                    abi::Abi::Win64             => Abi::Win64,
-                    abi::Abi::SysV64            => Abi::SysV64,
-                    abi::Abi::PtxKernel         => Abi::PtxKernel,
-                    abi::Abi::Msp430Interrupt   => Abi::Msp430Interrupt,
-                    abi::Abi::Rust              => Abi::Rust,
-                    abi::Abi::C                 => Abi::C,
-                    abi::Abi::System            => Abi::System,
-                    abi::Abi::RustIntrinsic     => Abi::RustIntrinsic,
-                    abi::Abi::RustCall          => Abi::RustCall,
-                    abi::Abi::PlatformIntrinsic => Abi::PlatformIntrinsic,
-                    abi::Abi::Unadjusted        => Abi::Unadjusted
-                };
-
-                let my_path = ModPath::join(&self.current_scope,
-                                            &ModPath::from_ident(span, id));
-                let fn_doc = FnDoc {
-                    crate_info: self.crate_info.clone(),
-                    path: my_path,
-                    signature: sig,
-                    unsafety: my_unsafety,
-                    constness: my_constness,
-                    // TODO: Generics
-                    visibility: my_visibility,
-                    abi: my_abi,
-                };
-
-                self.store.add_function(fn_doc);
-            },
-            FnKind::Method(_, _, _, _) => {
-                //TODO: This makes sense only in the context of an impl / Trait
-                //id.name.as_str().to_string(),
-            },
-            FnKind::Closure(_) => () // Don't care.
-        };
+        if let Some(fn_doc) = self.convert_fn(span, fn_kind, fn_decl) {
+            self.store.add_function(fn_doc);
+        }
 
         // Continue walking the rest of the funciton so we pick up any functions
         // or closures defined in its body.
@@ -203,7 +240,7 @@ impl<'v> Visitor<'v> for RustdocCacher<'v> {
     }
 
     fn visit_mac(&mut self, _mac: &'v ast::Mac) {
-        // TODO: No, it isn't fine...
+        // TODO: Record macros
     }
 
     fn visit_variant_data(&mut self, var: &'v ast::VariantData, id: ast::Ident,
@@ -233,20 +270,28 @@ impl<'v> Visitor<'v> for RustdocCacher<'v> {
         match item.node {
             ast::ItemKind::Mod(_) |
             ast::ItemKind::Struct(_, _) => {
-                self.push_path(item.ident);
+                self.push_path(pprust::ident_to_string(item.ident));
+                self.items.push(item);
             },
+            ast::ItemKind::Impl(_, _, _, _, _, _) |
+            ast::ItemKind::DefaultImpl(_, _) => {
+                // TODO: Need to record the trait the impl is from and the type it is on
+                self.push_path(pprust::ident_to_string(item.ident));
+                self.items.push(item);
+            }
             _ => (),
         }
 
-        self.items.push(item);
         visit::walk_item(self, item);
-        self.items.pop();
 
         match item.node {
             ast::ItemKind::Mod(_) |
-            ast::ItemKind::Struct(_, _) => {
+            ast::ItemKind::Struct(_, _) |
+            ast::ItemKind::Impl(_, _, _, _, _, _) |
+            ast::ItemKind::DefaultImpl(_, _) => {
+                self.items.pop();
                 self.pop_path()
-            },
+            }
             _ => (),
         }
     }

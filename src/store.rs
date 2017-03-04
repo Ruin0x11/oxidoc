@@ -110,7 +110,8 @@ impl Store {
             .chain_err(|| format!("Couldn't read oxidoc store {}", doc_path.display()))?;
 
         info!("Loading {}", doc_path.display());
-        let fn_doc: FnDoc = serde_json::from_str(&json).unwrap();
+        let fn_doc: FnDoc = serde_json::from_str(&json)
+            .chain_err(|| "Couldn't parse oxidoc store (regen probably needed)")?;
 
         Ok(fn_doc)
     }
@@ -131,7 +132,8 @@ impl Store {
             .chain_err(|| format!("Couldn't read oxidoc store {}", doc_path.display()))?;
 
         info!("Loading {}", doc_path.display());
-        let struct_doc: StructDoc = serde_json::from_str(&json).unwrap();
+        let struct_doc: StructDoc = serde_json::from_str(&json)
+            .chain_err(|| "Couldn't parse oxidoc store (regen probably needed)")?;
 
         Ok(struct_doc)
     }
