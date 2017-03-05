@@ -242,30 +242,21 @@ impl Display for CrateInfo {
     }
 }
 
-pub trait Document {
-    fn render(&self, f: &mut fmt::Formatter) -> fmt::Result;
+pub trait Documentable {
+    fn get_info(&self, path: &ModPath, f: &mut fmt::Formatter) -> String;
 }
 
-impl Display for Document {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        self.render(f)
-    }
-}
-
-/// All documentation information for a struct.
-#[derive(Debug, Serialize, Deserialize)]
-pub struct StructDoc {
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Document<T: Documentable> {
+    pub doc: T,
     pub crate_info: CrateInfo,
     pub path: ModPath,
     pub signature: String,
     pub docstring: String,
-
-    pub fn_docs: Vec<DocSig>,
 }
 
-impl Document for StructDoc {
+impl<T: Documentable> Document<T> {
     fn render(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        // TODO: docstrings are currently not built into the AST.
         write!(f, r#"
 (from crate {})
 === {}()
@@ -279,20 +270,29 @@ impl Document for StructDoc {
     }
 }
 
-impl Display for StructDoc {
+impl<T: Documentable> Display for Document<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         self.render(f)
     }
 }
 
+/// All documentation information for a struct.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct StructDoc_ {
+    pub fn_docs: Vec<DocSig>,
+}
+
+impl Documentable for StructDoc_ {
+    fn get_info(&self, path: &ModPath, f: &mut fmt::Formatter) -> String {
+        "".to_string()
+    }
+}
+
+pub type StructDoc = Document<StructDoc_>;
+
 /// All documentation inormation for a function.
 #[derive(Debug, Serialize, Deserialize)]
-pub struct FnDoc {
-    pub crate_info: CrateInfo,
-    pub path: ModPath,
-    pub signature: String,
-    pub docstring: String,
-
+pub struct FnDoc_ {
     pub unsafety: Unsafety,
     pub constness: Constness,
     // TODO: Generics
@@ -301,30 +301,15 @@ pub struct FnDoc {
     pub ty: FnKind,
 }
 
-impl Document for FnDoc {
-    fn render(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        // TODO: docstrings are currently not built into the AST.
-        let info = match self.ty {
-            FnKind::ItemFn => format!("{}()", self.path),
-            FnKind::Method => format!("(impl on {})", self.path.parent().unwrap()),
-            FnKind::MethodFromImpl => format!("(impl on {})", self.path.parent().unwrap()),
+impl Documentable for FnDoc_ {
+    fn get_info(&self, path: &ModPath, f: &mut fmt::Formatter) -> String {
+        match self.ty {
+            FnKind::ItemFn => format!("{}()", path),
+            FnKind::Method => format!("(impl on {})", path.parent().unwrap()),
+            FnKind::MethodFromImpl => format!("(impl on {})", path.parent().unwrap()),
             FnKind::MethodFromTrait => format!("<from trait>"),
-        };
-        write!(f, r#"
-(from crate {})
-=== {}
-------------------------------------------------------------------------------
-  {}
-
-------------------------------------------------------------------------------
-
-{}
-"#, self.crate_info, info, self.signature, self.docstring)
+        }
     }
 }
 
-impl Display for FnDoc {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        self.render(f)
-    }
-}
+pub type FnDoc = Document<FnDoc_>;

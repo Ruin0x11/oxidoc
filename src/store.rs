@@ -138,7 +138,7 @@ impl Store {
 
         // The struct documentation will live inside that struct's folder, so make sure to join it.
         let doc_path = self.path.join(scope.to_path())
-            .join(format!("{}/sdesc-{}.odoc", encoded_name, encoded_name));
+            .join(format!("{}/sdesc-{}.odoc", identifier, encoded_name));
 
         info!("Looking for {}", &doc_path.display());
 

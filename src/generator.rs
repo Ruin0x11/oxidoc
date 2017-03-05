@@ -212,19 +212,20 @@ impl<'v> RustdocCacher<'v> {
                     None    => "".to_string(),
                 };
 
-                Some(FnDoc {
+                Some(Document{
+
                     crate_info: self.crate_info.clone(),
                     path: my_path,
                     signature: sig,
                     docstring: doc,
-
-                    unsafety: Unsafety::from(unsafety),
-                    constness: Constness::from(constness),
-                    // TODO: Generics
-                    visibility: Visibility::from(visibility.clone()),
-                    abi: Abi::from(abi),
-                    ty: FnKind::ItemFn,
-                })
+                    doc: FnDoc_ {
+                        unsafety: Unsafety::from(unsafety),
+                        constness: Constness::from(constness),
+                        // TODO: Generics
+                        visibility: Visibility::from(visibility.clone()),
+                        abi: Abi::from(abi),
+                        ty: FnKind::ItemFn,
+                    }})
             },
             visit::FnKind::Method(id, m, vis, block) => {
                 let mut part_of_impl = false;
@@ -288,13 +289,14 @@ impl<'v> RustdocCacher<'v> {
                     path: my_path,
                     signature: sig,
                     docstring: doc,
-                    
-                    unsafety: Unsafety::from(m.unsafety),
-                    constness: Constness::from(m.constness.node),
-                    // TODO: Generics
-                    visibility: Visibility::from(visibility),
-                    abi: Abi::from(m.abi),
-                    ty: my_ty,
+                    doc: FnDoc_ {
+                        unsafety: Unsafety::from(m.unsafety),
+                        constness: Constness::from(m.constness.node),
+                        // TODO: Generics
+                        visibility: Visibility::from(visibility),
+                        abi: Abi::from(m.abi),
+                        ty: my_ty,
+                    }
                 });
 
                 if part_of_impl {
@@ -353,13 +355,14 @@ impl<'v> Visitor<'v> for RustdocCacher<'v> {
             None    => "".to_string(),
         };
 
-        let struct_doc = StructDoc {
+        let struct_doc = Document {
             crate_info: self.crate_info.clone(),
             path: my_path,
             signature: sig,
             docstring: doc,
-
-            fn_docs: Vec::new(),
+            doc: StructDoc_ {
+                fn_docs: Vec::new(),
+            }
         };
 
         self.store.add_struct(struct_doc);
@@ -608,10 +611,10 @@ mod test {
         "#).unwrap();
         store.save().unwrap();
         let strukt = store.load_struct(&ModPath::from("test".to_string()),
-                                           &"UndoccedStruct".to_string()).unwrap();
+                                       &"UndoccedStruct".to_string()).unwrap();
         assert_eq!(strukt.docstring, "".to_string());
         let strukt = store.load_struct(&ModPath::from("test".to_string()),
-                                           &"MyStruct".to_string()).unwrap();
+                                       &"MyStruct".to_string()).unwrap();
         assert_eq!(strukt.docstring, "/// Documentation for MyStruct.\n/// It is nice.".to_string());
     }
 
