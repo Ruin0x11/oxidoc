@@ -2,6 +2,7 @@ use std;
 use store::Store;
 use toml;
 
+use std::collections::HashMap;
 use std::fmt::{self, Display};
 use std::env;
 use std::path::{Path, PathBuf};
@@ -9,7 +10,7 @@ use std::io::{Read};
 use std::fs::{File, remove_dir_all};
 
 use syntax::abi;
-use syntax::ast;
+use syntax::ast::{self, ViewPath};
 use syntax::attr;
 use syntax::print::pprust;
 use syntax::codemap::Spanned;
@@ -116,6 +117,13 @@ struct RustdocCacher<'v> {
     // push it here and consume it when the corresponding Item is reached.
     // The docstring and item information are separate from one another.
     docstrings: Vec<String>,
+
+    // If something is 'use'd, make sure we can access what it is referring to.
+    // Push a new hashmap of identifiers and the global paths they reference
+    // upon entering a module and add everything 'use'd to it, and pop it off
+    // when it goes out of scope.
+    is_part_of_use: bool,
+    used_namespaces: Vec<HashMap<String, ModPath>>
 }
 
 /// Possibly retrives a docstring for the specified Item.
@@ -126,8 +134,10 @@ pub fn get_doc(item: &ast::Item) -> Option<String> {
         return None;
     }
 
-    let d = attrs.next().unwrap();
-    doc.push_str(&d.value_str().unwrap().to_string());
+    let attr = attrs.next().unwrap();
+    if let Some(d) = attr.value_str() {
+        doc.push_str(&d.to_string());
+    }
 
     while let Some(attr) = attrs.next() {
         if let Some(d) = attr.value_str() {
@@ -135,7 +145,6 @@ pub fn get_doc(item: &ast::Item) -> Option<String> {
             doc.push_str(&d.to_string());
         }
     }
-    println!("docfound: {}", &doc);
     Some(doc)
 }
 
@@ -156,6 +165,34 @@ impl<'v> RustdocCacher<'v> {
     /// Pops a segment from the current path scope.
     pub fn pop_segment(&mut self) {
         self.current_scope.pop();
+    }
+
+    /// Put all of the namespaces in the given 'use' path into the hashmap of known namespaces for the current module.
+    pub fn add_use_namespaces(&mut self, vp: &ast::ViewPath) {
+        if let Some(namespaces) = self.used_namespaces.last_mut() {
+            match vp.node {
+                ast::ViewPathSimple(rename, ref path) => {
+                    namespaces.insert(pprust::ident_to_string(rename), ModPath::from(path.clone()));
+                }
+                ast::ViewPathGlob(ref path) => {
+                    // TODO: add everything under the globbed path.
+                    // the glob could match either a module or enum.
+                }
+                ast::ViewPathList(ref prefix, ref list) => {
+                    // visitor.visit_path(prefix, item.id);
+                    // for item in list {
+                    //     visitor.visit_path_list_item(prefix, item)
+                    // }
+                    for item in list {
+                        let mut name = pprust::ident_to_string(item.node.name);
+                        if name == "{{root}}" {
+                            name = self.crate_info.package.name.clone();
+                        }
+                        namespaces.insert(name, ModPath::from(prefix.clone()));
+                    }
+                }
+            }
+        }
     }
 
     /// Possibly generates function documentation for the given AST info, or not if it's a closure.
@@ -302,10 +339,14 @@ impl<'v> Visitor<'v> for RustdocCacher<'v> {
 
         let my_path = ModPath::join(&self.current_scope,
                                     &ModPath::from_ident(span, id));
-        let sig = format!("{} {} {{ /* fields omitted */ }}",
-                          pprust::visibility_qualified(&self.items.iter().last().unwrap().vis,
-                                                       &"struct"),
-                          pprust::ident_to_string(id));
+        let sig = match self.items.iter().last() {
+            Some(item) => format!("{} {} {{ /* fields omitted */ }}",
+                                  pprust::visibility_qualified(&item.vis, &"struct"),
+                                  pprust::ident_to_string(id)),
+            None       => format!("struct {} {{ /* fields omitted */ }}",
+                                  pprust::ident_to_string(id)),
+
+        };
 
         let doc = match self.docstrings.pop() {
             Some(d) => d.to_string(),
@@ -331,20 +372,27 @@ impl<'v> Visitor<'v> for RustdocCacher<'v> {
         match item.node {
             ast::ItemKind::Mod(_) => {
                 self.push_segment(pprust::ident_to_string(item.ident));
-                self.items.push(item);
                 self.store.add_module(self.current_scope.clone());
+
+                // Keep track of what is 'use'd inside this module
+                self.used_namespaces.push(HashMap::new());
             },
             ast::ItemKind::Struct(_, _) => {
+                // Let the struct name be a path that can be resolved to
                 self.push_segment(pprust::ident_to_string(item.ident));
-                self.items.push(item);
+            },
+            ast::ItemKind::Use(ref vp) => {
+                self.add_use_namespaces(vp);
+                println!("namespaces: {:?}", self.used_namespaces);
             },
             ast::ItemKind::Impl(_, _, _, _, _, _) |
             ast::ItemKind::DefaultImpl(_, _) => {
                 // TODO: Need to record the trait the impl is from and the type it is on
-                self.items.push(item);
             }
             _ => (),
         }
+
+        self.items.push(item);
 
         if let Some(doc) = get_doc(&item) {
             self.docstrings.push(doc);
@@ -352,15 +400,23 @@ impl<'v> Visitor<'v> for RustdocCacher<'v> {
 
         visit::walk_item(self, item);
 
+        self.items.pop();
+
         match item.node {
-            ast::ItemKind::Mod(_) |
+            ast::ItemKind::Mod(_) => {
+                self.pop_segment();
+
+                // 'use'd namespaces go out of scope
+                self.used_namespaces.pop();
+            }
             ast::ItemKind::Struct(_, _) => {
-                self.items.pop();
                 self.pop_segment()
             }
+            ast::ItemKind::Use(_) => {
+                self.is_part_of_use = false;
+            },
             ast::ItemKind::Impl(_, _, _, _, _, _) |
             ast::ItemKind::DefaultImpl(_, _) => {
-                self.items.pop();
             }
             _ => (),
         }
@@ -389,8 +445,7 @@ fn generate_doc_cache(krate: &ast::Crate, crate_info: CrateInfo) -> Result<Store
 
     // Clear out old doc path
     if crate_doc_path.exists() {
-        remove_dir_all(&crate_doc_path)
-            .chain_err(|| format!("Could not remove crate doc directory {}", &crate_doc_path.display()))?;
+        remove_dir_all(&crate_doc_path);
     }
 
     let mut visitor = RustdocCacher {
@@ -399,6 +454,8 @@ fn generate_doc_cache(krate: &ast::Crate, crate_info: CrateInfo) -> Result<Store
         crate_info: crate_info.clone(),
         items: Vec::new(),
         docstrings: Vec::new(),
+        used_namespaces: Vec::new(),
+        is_part_of_use: false,
     };
 
     // Push the crate name onto the current namespace so
@@ -409,6 +466,9 @@ fn generate_doc_cache(krate: &ast::Crate, crate_info: CrateInfo) -> Result<Store
 
     // Also add the crate's namespace as a known documentation path
     visitor.store.add_module(visitor.current_scope.clone());
+
+    // Create a list of 'use'd namespaces for the crate's namespace
+    visitor.used_namespaces.push(HashMap::new());
 
     visitor.visit_mod(&krate.module, krate.span, ast::CRATE_NODE_ID);
 
@@ -488,6 +548,81 @@ mod test {
         let f = &"main".to_string();
         assert!(functions.contains(f));
         let functions = store.get_functions(&ModPath::from("test::a::b::Mine".to_string())).unwrap();
+        let f = &"print_val".to_string();
+        assert!(functions.contains(f));
+        let f = &"print_val_plus_two".to_string();
+        assert!(functions.contains(f));
+    }
+
+    #[test]
+    fn test_get_doc() {
+        let _ = env_logger::init();
+        let store = test_harness(r#"
+        fn main() {
+          println!("inside main");
+        }
+        mod a {
+            mod b {
+                fn thing() {
+                    println!("Hello, world!");
+                }
+                struct Mine(u32);
+                impl Mine {
+                    /// Prints this struct's value.
+                    /// Mildly useful.
+                    fn print_val(&self) {
+                        println!("{}", self.0);
+                    }
+                }
+            }
+            impl b::Mine {
+                /// Print's this struct's value plus 2.
+                /// Somewhat useful.
+                fn print_val_plus_two(&self) {
+                    println!("{}", self.0 + 2);
+                }
+            }
+        }"#).unwrap();
+        store.save();
+        let function = store.load_function(&ModPath::from("test::a::b".to_string()),
+                                           &"thing".to_string()).unwrap();
+        assert_eq!(function.docstring, "".to_string());
+        let function = store.load_function(&ModPath::from("test::a::b::Mine".to_string()),
+                                           &"print_val".to_string()).unwrap();
+        assert_eq!(function.docstring, "/// Prints this struct's value.\n/// Mildly useful.".to_string());
+        let function = store.load_function(&ModPath::from("test::a::b::Mine".to_string()),
+                                           &"print_val_plus_2".to_string()).unwrap();
+        assert_eq!(function.docstring, "/// Prints this struct's value plus 2.\n/// Somewhat useful.".to_string());
+    }
+
+    #[test]
+    fn test_get_doc_use() {
+        let _ = env_logger::init();
+        let store = test_harness(r#"
+        mod b {
+            mod a {
+            struct St(i32);
+            }
+            use a::St;
+        }
+        impl b::St {
+          fn print_val_plus_two(&self) {
+            println!("{}", self.0 + 2);
+          }
+        }
+        use b::St;
+        impl St {
+          fn print_val(&self) {
+            println!("{}", self.0);
+          }
+        }
+        fn main() {
+          let s = St(10);
+          s.print_val();
+          s.print_val_plus_two();
+        }
+        "#).unwrap();
+        let functions = store.get_functions(&ModPath::from("test::b::a::St".to_string())).unwrap();
         let f = &"print_val".to_string();
         assert!(functions.contains(f));
         let f = &"print_val_plus_two".to_string();

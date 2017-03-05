@@ -209,6 +209,12 @@ impl From<String> for ModPath {
     }
 }
 
+impl From<ast::Path> for ModPath {
+    fn from(p: ast::Path) -> ModPath {
+        ModPath(p.segments.iter().map(|s| PathSegment { identifier: pprust::ident_to_string(s.identifier) }).collect::<Vec<PathSegment>>())
+    }
+}
+
 impl Display for ModPath {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let s = self.0.iter().map(|i| i.identifier.clone()).collect::<Vec<String>>().join("::");
