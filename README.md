@@ -44,7 +44,7 @@ Description will go here.
 The design and output are heavily borrowed from `ri`. Many things still need to be done before `oxidoc` is truly useful, so contribution is welcomed.
 
 ## TODO
-- Docstrings (not currently available in the AST)
+- Docstrings
 - Documentation for crates, traits, constants, modules, structs, etc.
 - Documentation for `std`
 - Tests
