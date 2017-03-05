@@ -8,14 +8,16 @@ use std::path::{Path, PathBuf};
 use std::io::{Read};
 use std::fs::{File, remove_dir_all};
 
-use syntax::ast;
 use syntax::abi;
+use syntax::ast;
+use syntax::attr;
 use syntax::print::pprust;
 use syntax::codemap::Spanned;
 use syntax::codemap::{Span};
 use syntax::diagnostics::plugin::DiagnosticBuilder;
 use syntax::parse::{self, ParseSess};
 use syntax::visit::{self, Visitor};
+use syntax::symbol::{Symbol};
 
 use paths;
 use document::*;
@@ -109,6 +111,32 @@ struct RustdocCacher<'v> {
     current_scope: ModPath,
     crate_info: CrateInfo,
     items: Vec<&'v ast::Item>,
+
+    // If a docstring was found inside an adjacent Item's node,
+    // push it here and consume it when the corresponding Item is reached.
+    // The docstring and item information are separate from one another.
+    docstrings: Vec<String>,
+}
+
+/// Possibly retrives a docstring for the specified Item.
+pub fn get_doc(item: &ast::Item) -> Option<String> {
+    let mut doc = String::new();
+    let mut attrs = item.attrs.iter().filter(|at| at.check_name("doc")).peekable();
+    if let None = attrs.peek() {
+        return None;
+    }
+
+    let d = attrs.next().unwrap();
+    doc.push_str(&d.value_str().unwrap().to_string());
+
+    while let Some(attr) = attrs.next() {
+        if let Some(d) = attr.value_str() {
+            doc.push_str(&"\n");
+            doc.push_str(&d.to_string());
+        }
+    }
+    println!("docfound: {}", &doc);
+    Some(doc)
 }
 
 impl<'v> RustdocCacher<'v> {
@@ -132,7 +160,7 @@ impl<'v> RustdocCacher<'v> {
 
     /// Possibly generates function documentation for the given AST info, or not if it's a closure.
     pub fn convert_fn(&mut self, span: Span,
-               fn_kind: visit::FnKind<'v>, fn_decl: &'v ast::FnDecl) -> Option<FnDoc> {
+                      fn_kind: visit::FnKind<'v>, fn_decl: &'v ast::FnDecl) -> Option<FnDoc> {
 
         match fn_kind {
             visit::FnKind::ItemFn(id, gen, unsafety,
@@ -142,10 +170,17 @@ impl<'v> RustdocCacher<'v> {
 
                 let my_path = ModPath::join(&self.current_scope, &ModPath::from_ident(span, id));
 
+                let doc = match self.docstrings.pop() {
+                    Some(d) => d.to_string(),
+                    None    => "".to_string(),
+                };
+
                 Some(FnDoc {
                     crate_info: self.crate_info.clone(),
                     path: my_path,
                     signature: sig,
+                    docstring: doc,
+
                     unsafety: Unsafety::from(unsafety),
                     constness: Constness::from(constness),
                     // TODO: Generics
@@ -155,9 +190,6 @@ impl<'v> RustdocCacher<'v> {
                 })
             },
             visit::FnKind::Method(id, m, vis, block) => {
-                //TODO: This makes sense only in the context of an impl / Trait
-                println!("METHOD: {}", pprust::ident_to_string(id));
-
                 let mut part_of_impl = false;
 
                 let mut name: String = String::new();
@@ -165,21 +197,21 @@ impl<'v> RustdocCacher<'v> {
                     match item.node {
                         ast::ItemKind::Mod(_) |
                         ast::ItemKind::Struct(_, _) => {
-                            println!("Method inside scope");
+                            info!("Method inside scope");
                             FnKind::Method   
                         },
                         ast::ItemKind::DefaultImpl(_, _) => {
-                            println!("Method on default impl");
+                            info!("Method on default impl");
                             FnKind::MethodFromTrait   
                         },
                         ast::ItemKind::Impl(_, _, _, _, ref ty, _) => {
                             name = pprust::ty_to_string(ty);
                             part_of_impl = true;
-                            println!("Method on impl {}", &name);
+                            info!("Method on impl {}", &name);
                             FnKind::MethodFromImpl
                         }
                         _ => {
-                            println!("Something else");
+                            info!("Method inside module");
                             FnKind::ItemFn
                         },
                     }
@@ -205,14 +237,21 @@ impl<'v> RustdocCacher<'v> {
                 };
 
                 let my_path = ModPath::join(&self.current_scope, &ModPath::from_ident(span, id));
-                println!("PATH: {}", my_path);
 
                 let sig = pprust::to_string(|s| s.print_method_sig(id, &m, &visibility));
+
+
+                let doc = match self.docstrings.pop() {
+                    Some(d) => d.to_string(),
+                    None    => "".to_string(),
+                };
 
                 let fn_doc = Some(FnDoc {
                     crate_info: self.crate_info.clone(),
                     path: my_path,
                     signature: sig,
+                    docstring: doc,
+                    
                     unsafety: Unsafety::from(m.unsafety),
                     constness: Constness::from(m.constness.node),
                     // TODO: Generics
@@ -268,10 +307,17 @@ impl<'v> Visitor<'v> for RustdocCacher<'v> {
                                                        &"struct"),
                           pprust::ident_to_string(id));
 
+        let doc = match self.docstrings.pop() {
+            Some(d) => d.to_string(),
+            None    => "".to_string(),
+        };
+
         let struct_doc = StructDoc {
             crate_info: self.crate_info.clone(),
             path: my_path,
             signature: sig,
+            docstring: doc,
+
             fn_docs: Vec::new(),
         };
 
@@ -298,6 +344,10 @@ impl<'v> Visitor<'v> for RustdocCacher<'v> {
                 self.items.push(item);
             }
             _ => (),
+        }
+
+        if let Some(doc) = get_doc(&item) {
+            self.docstrings.push(doc);
         }
 
         visit::walk_item(self, item);
@@ -348,6 +398,7 @@ fn generate_doc_cache(krate: &ast::Crate, crate_info: CrateInfo) -> Result<Store
         current_scope: ModPath(Vec::new()),
         crate_info: crate_info.clone(),
         items: Vec::new(),
+        docstrings: Vec::new(),
     };
 
     // Push the crate name onto the current namespace so

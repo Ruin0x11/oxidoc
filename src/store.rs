@@ -112,10 +112,10 @@ impl Store {
 
     /// Attempt to load the function at 'loc' from the store.
     pub fn load_function(&self, scope: &ModPath, identifier: &String) -> Result<FnDoc> {
-        let decoded_name = paths::decode_doc_filename(&identifier)
-            .chain_err(|| format!("Failed to decode StoreLoc identifier {}", identifier))?;
+        let encoded_name = paths::encode_doc_filename(&identifier)
+            .chain_err(|| format!("Failed to encode StoreLoc identifier {}", identifier))?;
         let doc_path = self.path.join(scope.to_path())
-            .join(format!("{}.odoc", decoded_name));
+            .join(format!("{}.odoc", encoded_name));
         info!("Looking for {}", &doc_path.display());
         let mut fp = File::open(&doc_path)
             .chain_err(|| format!("Couldn't find oxidoc store {}", doc_path.display()))?;
@@ -133,10 +133,10 @@ impl Store {
 
     /// Attempt to load the struct at 'loc' from the store.
     pub fn load_struct(&self, scope: &ModPath, identifier: &String) -> Result<StructDoc> {
-        let decoded_name = paths::decode_doc_filename(&identifier)
-            .chain_err(|| format!("Failed to decode StoreLoc identifier {}", identifier))?;
+        let encoded_name = paths::encode_doc_filename(&identifier)
+            .chain_err(|| format!("Failed to encode StoreLoc identifier {}", identifier))?;
         let doc_path = self.path.join(scope.to_path())
-            .join(format!("sdesc-{}.odoc", decoded_name));
+            .join(format!("sdesc-{}.odoc", encoded_name));
         info!("Looking for {}", &doc_path.display());
 
         let mut fp = File::open(&doc_path)
@@ -155,9 +155,8 @@ impl Store {
 
     /// Adds a function's info to the store in memory.
     pub fn add_function(&mut self, fn_doc: FnDoc) {
-        self.add_all_modules(&fn_doc.path);
-
         let parent = fn_doc.path.parent().unwrap();
+        self.add_module(parent.clone());
 
         if let Some(list) = self.functions.get_mut(&parent) {
             let identifier = fn_doc.path.name().unwrap().identifier.clone();
@@ -193,8 +192,6 @@ impl Store {
 
     /// Adds a struct's info to the store in memory.
     pub fn add_struct(&mut self, struct_doc: StructDoc) {
-        self.add_all_modules(&struct_doc.path);
-
         let parent = struct_doc.path.parent().unwrap();
 
         if let Some(list) = self.structs.get_mut(&parent) {

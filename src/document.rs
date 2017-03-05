@@ -246,11 +246,13 @@ impl Display for Document {
     }
 }
 
+/// All documentation information for a struct.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct StructDoc {
     pub crate_info: CrateInfo,
     pub path: ModPath,
     pub signature: String,
+    pub docstring: String,
 
     pub fn_docs: Vec<DocSig>,
 }
@@ -267,7 +269,7 @@ impl Document for StructDoc {
 ------------------------------------------------------------------------------
 
 {}
-"#, self.crate_info, self.path, self.signature, "<Docstring will go here.>")
+"#, self.crate_info, self.path, self.signature, self.docstring)
     }
 }
 
@@ -277,11 +279,13 @@ impl Display for StructDoc {
     }
 }
 
+/// All documentation inormation for a function.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct FnDoc {
     pub crate_info: CrateInfo,
     pub path: ModPath,
     pub signature: String,
+    pub docstring: String,
 
     pub unsafety: Unsafety,
     pub constness: Constness,
@@ -296,8 +300,8 @@ impl Document for FnDoc {
         // TODO: docstrings are currently not built into the AST.
         let info = match self.ty {
             FnKind::ItemFn => format!("{}()", self.path),
-            FnKind::Method => format!("(impl on {})", self.path),
-            FnKind::MethodFromImpl => format!("(impl on {})", self.path),
+            FnKind::Method => format!("(impl on {})", self.path.parent().unwrap()),
+            FnKind::MethodFromImpl => format!("(impl on {})", self.path.parent().unwrap()),
             FnKind::MethodFromTrait => format!("<from trait>"),
         };
         write!(f, r#"
@@ -309,7 +313,7 @@ impl Document for FnDoc {
 ------------------------------------------------------------------------------
 
 {}
-"#, self.crate_info, info, self.signature, "<Docstring will go here.>")
+"#, self.crate_info, info, self.signature, self.docstring)
     }
 }
 
