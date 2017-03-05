@@ -54,4 +54,5 @@ The design and output are heavily borrowed from `ri`. Many things still need to 
 - Showing lifetime information for module paths
 - Documenting generics
 - Handling non-standard crate entry points
+- Curses frontend (possibly using [Cursive](https://github.com/gyscos/Cursive))
 - Probably many other things.
