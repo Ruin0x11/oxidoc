@@ -229,26 +229,37 @@ impl<'v> RustdocCacher<'v> {
             visit::FnKind::Method(id, m, vis, block) => {
                 let mut part_of_impl = false;
 
-                let mut name: String = String::new();
+                let visibility = match vis {
+                    Some(v) => {
+                        v.clone()
+                    }
+                    None => {
+                        ast::Visibility::Inherited
+                    }
+                };
+
+                let sig = pprust::to_string(|s| s.print_method_sig(id, &m, &visibility));
+
+                let mut impl_name: String = String::new();
                 let my_ty = if let Some(item) = self.items.iter().last() {
                     match item.node {
                         ast::ItemKind::Mod(_) |
                         ast::ItemKind::Struct(_, _) => {
-                            info!("Method inside scope");
+                            info!("METHOD: inside scope, {}", sig);
                             FnKind::Method   
                         },
                         ast::ItemKind::DefaultImpl(_, _) => {
-                            info!("Method on default impl");
+                            info!("METHOD: on default impl {}", sig);
                             FnKind::MethodFromTrait   
                         },
                         ast::ItemKind::Impl(_, _, _, _, ref ty, _) => {
-                            name = pprust::ty_to_string(ty);
+                            impl_name = pprust::ty_to_string(ty);
                             part_of_impl = true;
-                            info!("Method on impl {}", &name);
+                            info!("METHOD: on impl {}, {}", &impl_name, sig);
                             FnKind::MethodFromImpl
                         }
                         _ => {
-                            info!("Method inside module");
+                            info!("METHOD: inside module {}", sig);
                             FnKind::ItemFn
                         },
                     }
@@ -261,22 +272,10 @@ impl<'v> RustdocCacher<'v> {
                 // The name itself can have a module path like "module::Struct"
                 // if "impl module::Struct" is given
                 if part_of_impl {
-                    self.push_path(ModPath::from(name.clone()));
+                    self.push_path(ModPath::from(impl_name.clone()));
                 }
 
-                let visibility = match vis {
-                    Some(v) => {
-                        v.clone()
-                    }
-                    None => {
-                        ast::Visibility::Inherited
-                    }
-                };
-
                 let my_path = ModPath::join(&self.current_scope, &ModPath::from_ident(span, id));
-
-                let sig = pprust::to_string(|s| s.print_method_sig(id, &m, &visibility));
-
 
                 let doc = match self.docstrings.pop() {
                     Some(d) => d.to_string(),
@@ -298,7 +297,7 @@ impl<'v> RustdocCacher<'v> {
                 });
 
                 if part_of_impl {
-                    for _ in 0..ModPath::from(name.clone()).0.len() {
+                    for _ in 0..ModPath::from(impl_name.clone()).0.len() {
                         self.pop_segment();
                     }
                 }
@@ -383,7 +382,6 @@ impl<'v> Visitor<'v> for RustdocCacher<'v> {
             },
             ast::ItemKind::Use(ref vp) => {
                 self.add_use_namespaces(vp);
-                println!("namespaces: {:?}", self.used_namespaces);
             },
             ast::ItemKind::Impl(_, _, _, _, _, _) |
             ast::ItemKind::DefaultImpl(_, _) => {
@@ -392,14 +390,12 @@ impl<'v> Visitor<'v> for RustdocCacher<'v> {
             _ => (),
         }
 
-        self.items.push(item);
-
         if let Some(doc) = get_doc(&item) {
             self.docstrings.push(doc);
         }
 
+        self.items.push(item);
         visit::walk_item(self, item);
-
         self.items.pop();
 
         match item.node {
@@ -528,7 +524,7 @@ mod test {
                 fn thing() {
                     println!("Hello, world!");
                 }
-                struct Mine(u32);
+                pub struct Mine(pub u32);
                 impl Mine {
                     fn print_val(&self) {
                         println!("{}", self.0);
@@ -558,15 +554,17 @@ mod test {
     fn test_get_doc_fn() {
         let _ = env_logger::init();
         let store = test_harness(r#"
+        /// Starts the program.
+        /// Pretty useful.
         fn main() {
-          println!("inside main");
+            println!("inside main");
         }
         mod a {
             mod b {
                 fn thing() {
                     println!("Hello, world!");
                 }
-                struct Mine(u32);
+                pub struct Mine(pub u32);
                 impl Mine {
                     /// Prints this struct's value.
                     /// Mildly useful.
@@ -584,6 +582,9 @@ mod test {
             }
         }"#).unwrap();
         store.save().unwrap();
+        let function = store.load_function(&ModPath::from("test".to_string()),
+                                           &"main".to_string()).unwrap();
+        assert_eq!(function.docstring, "/// Starts the program.\n/// Pretty useful.".to_string());
         let function = store.load_function(&ModPath::from("test::a::b".to_string()),
                                            &"thing".to_string()).unwrap();
         assert_eq!(function.docstring, "".to_string());
@@ -594,6 +595,7 @@ mod test {
                                            &"print_val_plus_2".to_string()).unwrap();
         assert_eq!(function.docstring, "/// Prints this struct's value plus 2.\n/// Somewhat useful.".to_string());
     }
+    
 
     #[test]
     fn test_get_doc_struct() {
