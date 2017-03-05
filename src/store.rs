@@ -135,8 +135,11 @@ impl Store {
     pub fn load_struct(&self, scope: &ModPath, identifier: &String) -> Result<StructDoc> {
         let encoded_name = paths::encode_doc_filename(&identifier)
             .chain_err(|| format!("Failed to encode StoreLoc identifier {}", identifier))?;
+
+        // The struct documentation will live inside that struct's folder, so make sure to join it.
         let doc_path = self.path.join(scope.to_path())
-            .join(format!("sdesc-{}.odoc", encoded_name));
+            .join(format!("{}/sdesc-{}.odoc", encoded_name, encoded_name));
+
         info!("Looking for {}", &doc_path.display());
 
         let mut fp = File::open(&doc_path)

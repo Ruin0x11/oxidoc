@@ -555,7 +555,7 @@ mod test {
     }
 
     #[test]
-    fn test_get_doc() {
+    fn test_get_doc_fn() {
         let _ = env_logger::init();
         let store = test_harness(r#"
         fn main() {
@@ -583,7 +583,7 @@ mod test {
                 }
             }
         }"#).unwrap();
-        store.save();
+        store.save().unwrap();
         let function = store.load_function(&ModPath::from("test::a::b".to_string()),
                                            &"thing".to_string()).unwrap();
         assert_eq!(function.docstring, "".to_string());
@@ -593,6 +593,27 @@ mod test {
         let function = store.load_function(&ModPath::from("test::a::b::Mine".to_string()),
                                            &"print_val_plus_2".to_string()).unwrap();
         assert_eq!(function.docstring, "/// Prints this struct's value plus 2.\n/// Somewhat useful.".to_string());
+    }
+
+    #[test]
+    fn test_get_doc_struct() {
+        let _ = env_logger::init();
+        let store = test_harness(r#"
+        //! Crate documentation.
+        
+        struct UndoccedStruct;
+ 
+        /// Documentation for MyStruct.
+        /// It is nice.
+        struct MyStruct;
+        "#).unwrap();
+        store.save().unwrap();
+        let strukt = store.load_struct(&ModPath::from("test".to_string()),
+                                           &"UndoccedStruct".to_string()).unwrap();
+        assert_eq!(strukt.docstring, "".to_string());
+        let strukt = store.load_struct(&ModPath::from("test".to_string()),
+                                           &"MyStruct".to_string()).unwrap();
+        assert_eq!(strukt.docstring, "/// Documentation for MyStruct.\n/// It is nice.".to_string());
     }
 
     #[test]
