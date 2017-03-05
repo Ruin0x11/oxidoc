@@ -212,19 +212,20 @@ impl<'v> RustdocCacher<'v> {
                     None    => "".to_string(),
                 };
 
-                Some(FnDoc {
+                Some(Document{
+
                     crate_info: self.crate_info.clone(),
                     path: my_path,
                     signature: sig,
                     docstring: doc,
-
-                    unsafety: Unsafety::from(unsafety),
-                    constness: Constness::from(constness),
-                    // TODO: Generics
-                    visibility: Visibility::from(visibility.clone()),
-                    abi: Abi::from(abi),
-                    ty: FnKind::ItemFn,
-                })
+                    doc: FnDoc_ {
+                        unsafety: Unsafety::from(unsafety),
+                        constness: Constness::from(constness),
+                        // TODO: Generics
+                        visibility: Visibility::from(visibility.clone()),
+                        abi: Abi::from(abi),
+                        ty: FnKind::ItemFn,
+                    }})
             },
             visit::FnKind::Method(id, m, vis, block) => {
                 let mut part_of_impl = false;
@@ -235,11 +236,11 @@ impl<'v> RustdocCacher<'v> {
                         ast::ItemKind::Mod(_) |
                         ast::ItemKind::Struct(_, _) => {
                             info!("Method inside scope");
-                            FnKind::Method   
+                            FnKind::Method
                         },
                         ast::ItemKind::DefaultImpl(_, _) => {
                             info!("Method on default impl");
-                            FnKind::MethodFromTrait   
+                            FnKind::MethodFromTrait
                         },
                         ast::ItemKind::Impl(_, _, _, _, ref ty, _) => {
                             name = pprust::ty_to_string(ty);
@@ -288,13 +289,14 @@ impl<'v> RustdocCacher<'v> {
                     path: my_path,
                     signature: sig,
                     docstring: doc,
-                    
-                    unsafety: Unsafety::from(m.unsafety),
-                    constness: Constness::from(m.constness.node),
-                    // TODO: Generics
-                    visibility: Visibility::from(visibility),
-                    abi: Abi::from(m.abi),
-                    ty: my_ty,
+                    doc: FnDoc_ {
+                        unsafety: Unsafety::from(m.unsafety),
+                        constness: Constness::from(m.constness.node),
+                        // TODO: Generics
+                        visibility: Visibility::from(visibility),
+                        abi: Abi::from(m.abi),
+                        ty: my_ty,
+                    }
                 });
 
                 if part_of_impl {
@@ -353,13 +355,14 @@ impl<'v> Visitor<'v> for RustdocCacher<'v> {
             None    => "".to_string(),
         };
 
-        let struct_doc = StructDoc {
+        let struct_doc = Document {
             crate_info: self.crate_info.clone(),
             path: my_path,
             signature: sig,
             docstring: doc,
-
-            fn_docs: Vec::new(),
+            doc: StructDoc_ {
+                fn_docs: Vec::new(),
+            }
         };
 
         self.store.add_struct(struct_doc);
@@ -367,7 +370,28 @@ impl<'v> Visitor<'v> for RustdocCacher<'v> {
         visit::walk_struct_def(self, var);
     }
 
-    fn visit_mod(&mut self, m: &'ast Mod, _s: Span, _n: NodeId) {
+    fn visit_mod(&mut self, m: &'v ast::Mod, _s: Span, _n: ast::NodeId) {
+        let sig = format!("mod {}", self.current_scope);
+
+        let doc = match self.docstrings.pop() {
+            Some(d) => d.to_string(),
+            None    => "".to_string(),
+        };
+
+        let mod_doc = Document {
+            crate_info: self.crate_info.clone(),
+            path: self.current_scope.clone(),
+            signature: sig,
+            docstring: doc,
+            doc: ModuleDoc_ {
+                fn_docs: Vec::new(),
+                struct_docs: Vec::new(),
+                module_docs: Vec::new(),
+            }
+        };
+
+        self.store.add_module(mod_doc);
+
         visit::walk_mod(self, m);
     }
 
@@ -376,7 +400,7 @@ impl<'v> Visitor<'v> for RustdocCacher<'v> {
         match item.node {
             ast::ItemKind::Mod(_) => {
                 self.push_segment(pprust::ident_to_string(item.ident));
-                self.store.add_module(self.current_scope.clone());
+                self.store.add_modpath(self.current_scope.clone());
 
                 // Keep track of what is 'use'd inside this module
                 self.used_namespaces.push(HashMap::new());
@@ -468,7 +492,7 @@ fn generate_doc_cache(krate: &ast::Crate, crate_info: CrateInfo) -> Result<Store
     });
 
     // Also add the crate's namespace as a known documentation path
-    visitor.store.add_module(visitor.current_scope.clone());
+    visitor.store.add_modpath(visitor.current_scope.clone());
 
     // Create a list of 'use'd namespaces for the crate's namespace
     visitor.used_namespaces.push(HashMap::new());
@@ -510,7 +534,7 @@ mod test {
             mod b {
             }
         }"#).unwrap();
-        let modules = store.get_modules();
+        let modules = store.get_modpaths();
         let p = &ModPath::from("test".to_string());
         assert!(modules.contains(p));
         let p = &ModPath::from("test::a".to_string());
@@ -603,19 +627,19 @@ mod test {
         let _ = env_logger::init();
         let store = test_harness(r#"
         //! Crate documentation.
-        
+
         struct UndoccedStruct;
- 
+
         /// Documentation for MyStruct.
         /// It is nice.
         struct MyStruct;
         "#).unwrap();
         store.save().unwrap();
         let strukt = store.load_struct(&ModPath::from("test".to_string()),
-                                           &"UndoccedStruct".to_string()).unwrap();
+                                       &"UndoccedStruct".to_string()).unwrap();
         assert_eq!(strukt.docstring, "".to_string());
         let strukt = store.load_struct(&ModPath::from("test".to_string()),
-                                           &"MyStruct".to_string()).unwrap();
+                                       &"MyStruct".to_string()).unwrap();
         assert_eq!(strukt.docstring, "/// Documentation for MyStruct.\n/// It is nice.".to_string());
     }
 

@@ -16,8 +16,6 @@ enum Selector {
     OnStruct,
 }
 
-#[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
-
 /// Defines a path and identifier for a documentation item, as well as if it belongs to a struct, trait, or directly under a module.
 #[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub struct DocSig {
@@ -244,106 +242,21 @@ impl Display for CrateInfo {
     }
 }
 
-pub trait Document {
-    fn render(&self, f: &mut fmt::Formatter) -> fmt::Result;
+pub trait Documentable {
+    fn get_info(&self, path: &ModPath) -> String;
 }
 
-impl Display for Document {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        self.render(f)
-    }
-}
-
-/// All documentation information for a module.
-#[derive(Debug, Serialize, Deserialize)]
-pub struct ModuleDoc {
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Document<T: Documentable> {
+    pub doc: T,
     pub crate_info: CrateInfo,
     pub path: ModPath,
     pub signature: String,
     pub docstring: String,
-
-    pub module_docs: Vec<DocSig>,
-    pub struct_docs: Vec<DocSig>,
-    pub fn_docs: Vec<DocSig>,
 }
 
-impl Document for ModuleDoc {
+impl<T: Documentable> Document<T> {
     fn render(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, r#"
-(from crate {})
-=== {}()
-------------------------------------------------------------------------------
-  {}
-
-------------------------------------------------------------------------------
-
-{}
-"#, self.crate_info, self.path, self.signature, self.docstring)
-    }
-}
-
-impl Display for ModuleDoc {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        self.render(f)
-    }
-}
-
-/// All documentation information for a struct.
-#[derive(Debug, Serialize, Deserialize)]
-pub struct StructDoc {
-    pub crate_info: CrateInfo,
-    pub path: ModPath,
-    pub signature: String,
-    pub docstring: String,
-
-    pub fn_docs: Vec<DocSig>,
-}
-
-impl Document for StructDoc {
-    fn render(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, r#"
-(from crate {})
-=== {}()
-------------------------------------------------------------------------------
-  {}
-
-------------------------------------------------------------------------------
-
-{}
-"#, self.crate_info, self.path, self.signature, self.docstring)
-    }
-}
-
-impl Display for StructDoc {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        self.render(f)
-    }
-}
-
-/// All documentation inormation for a function.
-#[derive(Debug, Serialize, Deserialize)]
-pub struct FnDoc {
-    pub crate_info: CrateInfo,
-    pub path: ModPath,
-    pub signature: String,
-    pub docstring: String,
-
-    pub unsafety: Unsafety,
-    pub constness: Constness,
-    // TODO: Generics
-    pub visibility: Visibility,
-    pub abi: Abi,
-    pub ty: FnKind,
-}
-
-impl Document for FnDoc {
-    fn render(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let info = match self.ty {
-            FnKind::ItemFn => format!("{}()", self.path),
-            FnKind::Method => format!("(impl on {})", self.path.parent().unwrap()),
-            FnKind::MethodFromImpl => format!("(impl on {})", self.path.parent().unwrap()),
-            FnKind::MethodFromTrait => format!("<from trait>"),
-        };
         write!(f, r#"
 (from crate {})
 === {}
@@ -353,12 +266,66 @@ impl Document for FnDoc {
 ------------------------------------------------------------------------------
 
 {}
-"#, self.crate_info, info, self.signature, self.docstring)
+"#, self.crate_info, self.doc.get_info(&self.path), self.signature, self.docstring)
     }
 }
 
-impl Display for FnDoc {
+impl<T: Documentable> Display for Document<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         self.render(f)
     }
 }
+
+/// All documentation information for a struct.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct StructDoc_ {
+    pub fn_docs: Vec<DocSig>,
+}
+
+impl Documentable for StructDoc_ {
+    fn get_info(&self, path: &ModPath) -> String {
+        path.to_string()
+    }
+}
+
+pub type StructDoc = Document<StructDoc_>;
+
+/// All documentation inormation for a function.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct FnDoc_ {
+    pub unsafety: Unsafety,
+    pub constness: Constness,
+    // TODO: Generics
+    pub visibility: Visibility,
+    pub abi: Abi,
+    pub ty: FnKind,
+}
+
+impl Documentable for FnDoc_ {
+    fn get_info(&self, path: &ModPath) -> String {
+        match self.ty {
+            FnKind::ItemFn => format!("{}()", path),
+            FnKind::Method => format!("(impl on {})", path.parent().unwrap()),
+            FnKind::MethodFromImpl => format!("(impl on {})", path.parent().unwrap()),
+            FnKind::MethodFromTrait => format!("<from trait>"),
+        }
+    }
+}
+
+pub type FnDoc = Document<FnDoc_>;
+
+/// All documentation inormation for a module.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ModuleDoc_ {
+    pub fn_docs: Vec<DocSig>,
+    pub struct_docs: Vec<DocSig>,
+    pub module_docs: Vec<DocSig>,
+}
+
+impl Documentable for ModuleDoc_ {
+    fn get_info(&self, path: &ModPath) -> String {
+        path.to_string()
+    }
+}
+
+pub type ModuleDoc = Document<ModuleDoc_>;

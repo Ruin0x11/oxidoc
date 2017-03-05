@@ -7,7 +7,7 @@ use std::fmt::Display;
 use std::io::{Read, Write};
 
 use ::errors::*;
-use document::{Document, FnDoc, StructDoc, ModPath};
+use document::*;
 use paths;
 
 #[derive(Debug)]
@@ -44,6 +44,16 @@ fn get_struct_docfile(store_path: &PathBuf, struct_doc: &StructDoc) -> Result<Pa
     Ok(store_path.join(local_path))
 }
 
+/// Gets the .odoc output file for a module's documentation
+fn get_module_docfile(store_path: &PathBuf, module_doc: &ModuleDoc) -> Result<PathBuf> {
+    let module_path = module_doc.path.to_path();
+    let docfile = paths::encode_doc_filename(&module_doc.path.name().unwrap().identifier)
+        .chain_err(|| "Could not encode doc filename")?;
+    let name = format!("mdesc-{}.odoc", docfile);
+    let local_path = module_path.join(name);
+    Ok(store_path.join(local_path))
+}
+
 type FunctionName = String;
 type StructName = String;
 
@@ -53,13 +63,14 @@ pub struct Store {
     pub path: PathBuf,
 
     /// Locations of documentation in the store
-    modules: HashSet<ModPath>,
+    modpaths: HashSet<ModPath>,
     functions: HashMap<ModPath, HashSet<FunctionName>>,
     structs: HashMap<ModPath, HashSet<StructName>>,
 
     /// Documentation data in memory
     fn_docs: Vec<FnDoc>,
     struct_docs: Vec<StructDoc>,
+    module_docs: Vec<ModuleDoc>,
 }
 
 impl Store {
@@ -67,12 +78,13 @@ impl Store {
 
         Ok(Store {
             path: path,
-            modules: HashSet::new(),
+            modpaths: HashSet::new(),
             functions: HashMap::new(),
             structs: HashMap::new(),
 
             fn_docs: Vec::new(),
             struct_docs: Vec::new(),
+            module_docs: Vec::new(),
         })
     }
 
@@ -84,11 +96,11 @@ impl Store {
         self.structs.get(scope)
     }
 
-    pub fn get_modules(&self) -> &HashSet<ModPath> {
-        for m in &self.modules {
+    pub fn get_modpaths(&self) -> &HashSet<ModPath> {
+        for m in &self.modpaths {
             info!("module: {}\n", m);
         }
-        &self.modules
+        &self.modpaths
     }
 
     /// Load the cache for this store, which currently contains the names of all modules.
@@ -105,9 +117,30 @@ impl Store {
         info!("odoc: {}", &path.display());
         let module_names: HashSet<ModPath> = serde_json::from_str(&json).unwrap();
         info!("MN: {:?}", &module_names);
-        self.modules = module_names;
+        self.modpaths = module_names;
 
         Ok(())
+    }
+
+    /// Attempt to load the function at 'loc' from the store.
+    pub fn load_module(&self, scope: &ModPath, identifier: &String) -> Result<ModuleDoc> {
+        let encoded_name = paths::encode_doc_filename(&identifier)
+            .chain_err(|| format!("Failed to encode StoreLoc identifier {}", identifier))?;
+        let doc_path = self.path.join(scope.to_path())
+            .join(format!("{}/mdesc-{}.odoc", identifier, encoded_name));
+        info!("Looking for {}", &doc_path.display());
+        let mut fp = File::open(&doc_path)
+            .chain_err(|| format!("Couldn't find oxidoc store {}", doc_path.display()))?;
+
+        let mut json = String::new();
+        fp.read_to_string(&mut json)
+            .chain_err(|| format!("Couldn't read oxidoc store {}", doc_path.display()))?;
+
+        info!("Loading {}", doc_path.display());
+        let fn_doc: ModuleDoc = serde_json::from_str(&json)
+            .chain_err(|| "Couldn't parse oxidoc store (regen probably needed)")?;
+
+        Ok(fn_doc)
     }
 
     /// Attempt to load the function at 'loc' from the store.
@@ -138,7 +171,7 @@ impl Store {
 
         // The struct documentation will live inside that struct's folder, so make sure to join it.
         let doc_path = self.path.join(scope.to_path())
-            .join(format!("{}/sdesc-{}.odoc", encoded_name, encoded_name));
+            .join(format!("{}/sdesc-{}.odoc", identifier, encoded_name));
 
         info!("Looking for {}", &doc_path.display());
 
@@ -159,7 +192,7 @@ impl Store {
     /// Adds a function's info to the store in memory.
     pub fn add_function(&mut self, fn_doc: FnDoc) {
         let parent = fn_doc.path.parent().unwrap();
-        self.add_module(parent.clone());
+        self.add_modpath(parent.clone());
 
         if let Some(list) = self.functions.get_mut(&parent) {
             let identifier = fn_doc.path.name().unwrap().identifier.clone();
@@ -178,18 +211,38 @@ impl Store {
         self.fn_docs.push(fn_doc);
     }
 
-    /// Add a module's path to the list of known modules in this store.
-    pub fn add_module(&mut self, scope: ModPath) {
-        info!("Add Module: {}", scope);
-        self.modules.insert(scope);
+    pub fn add_module(&mut self, module_doc: ModuleDoc) {
+        let parent = module_doc.path.parent().unwrap();
+
+        if let Some(list) = self.structs.get_mut(&parent) {
+            let identifier = module_doc.path.name().unwrap().identifier.clone();
+            list.insert(identifier);
+        }
+        if let None = self.structs.get(&parent) {
+            let identifier = module_doc.path.name().unwrap().identifier.clone();
+            let mut s = HashSet::new();
+            s.insert(identifier);
+            self.structs.insert(parent, s);
+        }
+
+        info!("Module {} contains struct {}", module_doc.path.parent().unwrap().to_string(),
+                 module_doc.path.name().unwrap().identifier);
+
+        self.module_docs.push(module_doc);
     }
 
-    fn add_all_modules(&mut self, scope: &ModPath) {
+    /// Add a module's path to the list of known modules in this store.
+    pub fn add_modpath(&mut self, scope: ModPath) {
+        info!("Add Module: {}", scope);
+        self.modpaths.insert(scope);
+    }
+
+    fn add_all_modpaths(&mut self, scope: &ModPath) {
         let mut parent = scope.parent();
         while let Some(path) = parent {
             info!("Add module path {}", &path);
             parent = path.parent();
-            self.modules.insert(path);
+            self.modpaths.insert(path);
         }
     }
 
@@ -197,6 +250,7 @@ impl Store {
     pub fn add_struct(&mut self, struct_doc: StructDoc) {
         let parent = struct_doc.path.parent().unwrap();
 
+        // Add this struct to the set of structs under the struct's module path
         if let Some(list) = self.structs.get_mut(&parent) {
             let identifier = struct_doc.path.name().unwrap().identifier.clone();
             list.insert(identifier);
@@ -212,6 +266,29 @@ impl Store {
                  struct_doc.path.name().unwrap().identifier);
 
         self.struct_docs.push(struct_doc);
+    }
+
+
+    /// Writes a .odoc JSON store documenting a struct to disk.
+    pub fn save_module(&self, module_doc: &ModuleDoc) -> Result<PathBuf> {
+        let json = serde_json::to_string(&module_doc).unwrap();
+
+        let outfile = get_module_docfile(&self.path, &module_doc)
+            .chain_err(|| format!("Could not obtain docfile path inside {}", self.path.display()))?;
+
+        create_dir_all(outfile.parent().unwrap())
+            .chain_err(|| format!("Failed to create module dir {}", self.path.display()))?;
+
+        let mut fp = File::create(&outfile)
+            .chain_err(|| format!("Could not write struct odoc file {}", outfile.display()))?;
+        fp.write_all(json.as_bytes())
+            .chain_err(|| format!("Failed to write to struct odoc file {}", outfile.display()))?;
+
+        // Insert the module name into the list of known module names
+
+        info!("Wrote module doc to {}", &outfile.display());
+
+        Ok(outfile)
     }
 
     /// Writes a .odoc JSON store documenting a struct to disk.
@@ -266,6 +343,11 @@ impl Store {
         self.save_cache()
             .chain_err(|| format!("Unable to save cache for directory {}", &self.path.display()))?;
 
+        for module_doc in &self.module_docs {
+            self.save_module(&module_doc)
+                .chain_err(|| format!("Could not save module doc {}", &module_doc.path.name().unwrap()))?;
+        }
+
         for struct_doc in &self.struct_docs {
             self.save_struct(&struct_doc)
                 .chain_err(|| format!("Could not save struct doc {}", &struct_doc.path.name().unwrap()))?;
@@ -281,7 +363,7 @@ impl Store {
 
     /// Saves this store's cached list of module names to disk.
     pub fn save_cache(&self) -> Result<()> {
-        let json = serde_json::to_string(&self.modules).unwrap();
+        let json = serde_json::to_string(&self.modpaths).unwrap();
 
         let outfile = self.path.join("cache.odoc");
         let mut fp = File::create(&outfile).chain_err(|| format!("Could not write cache file {}", outfile.display()))?;

@@ -4,7 +4,7 @@ use ::errors::*;
 use std::collections::HashMap;
 use std::fmt;
 use std::fmt::Display;
-use document::{DocSig, PathSegment, StructDoc, FnDoc, ModPath};
+use document::*;
 
 error_chain! {
     errors {
@@ -48,7 +48,7 @@ impl Driver {
 
         let mut store_with_module = HashMap::new();
         for (i, store) in stores.iter().enumerate() {
-            let modules = store.get_modules();
+            let modules = store.get_modpaths();
             for m in modules {
                 store_with_module.insert(m.clone(), i);
             }
@@ -75,6 +75,10 @@ impl Driver {
 
     /// Takes a name, determines what kind of documentation it is referring to, and displays it.
     fn display_name(&self, name: &DocSig) -> Result<()> {
+        if let Ok(x) = self.display_module(name) {
+            return Ok(x)
+        }
+
         if let Ok(x) = self.display_struct(name) {
             return Ok(x)
         }
@@ -86,10 +90,26 @@ impl Driver {
         bail!(ErrorKind::NoDocumentationFound)
     }
 
+    /// Attempts to find a module named 'name' in the oxidoc stores and print its documentation.
+    fn display_module(&self, name: &DocSig) -> Result<()> {
+        // TODO: Attempt to filter here for a single match
+        // If no match, list functions that have similar names
+        let module_docs = self.load_modules_matching(&name).
+            chain_err(|| format!("No structs match the given name {}", &name))?;
+
+        println!("= {}", &name);
+
+        for module_doc in module_docs {
+            // TODO: document construction should happen
+            println!("{}", &module_doc);
+        }
+        Ok(())
+    }
+
     /// Attempts to find a struct named 'name' in the oxidoc stores and print its documentation.
     fn display_struct(&self, name: &DocSig) -> Result<()> {
         // TODO: Attempt to filter here for a single match
-        // If no match, list functions that have similar names
+        // If no match, list structs that have similar names
         let struct_docs = self.load_structs_matching(&name).
             chain_err(|| format!("No structs match the given name {}", &name))?;
 
@@ -116,6 +136,21 @@ impl Driver {
             println!("{}", &fn_doc);
         }
         Ok(())
+    }
+
+    /// Obtains documentation for structs with the identifier 'name'
+    fn load_modules_matching(&self, name: &DocSig) -> Result<Vec<ModuleDoc>> {
+        let mut found = Vec::new();
+        for loc in self.stores_containing(name).unwrap() {
+            if let Ok(strukt) = loc.store.load_module(&loc.scope, &loc.identifier) {
+                info!("Found the struct {} looking for {}", &strukt, &name);
+                found.push(strukt);
+            }
+        }
+        if found.len() == 0 {
+            bail!("No structs matched name {}", name);
+        }
+        Ok(found)
     }
 
     /// Obtains documentation for structs with the identifier 'name'
@@ -166,7 +201,7 @@ impl Driver {
                 for idx in stores {
                     let store = self.stores.get(idx).unwrap();
                     info!("Store: {:?}", &store);
-                    for scope in store.get_modules() {
+                    for scope in store.get_modpaths() {
                         results.push(StoreLoc{
                             store: store,
                             scope: scope.clone(),
