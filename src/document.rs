@@ -16,6 +16,8 @@ enum Selector {
     OnStruct,
 }
 
+#[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
+
 /// Defines a path and identifier for a documentation item, as well as if it belongs to a struct, trait, or directly under a module.
 #[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub struct DocSig {
@@ -252,6 +254,40 @@ impl Display for Document {
     }
 }
 
+/// All documentation information for a module.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ModuleDoc {
+    pub crate_info: CrateInfo,
+    pub path: ModPath,
+    pub signature: String,
+    pub docstring: String,
+
+    pub module_docs: Vec<DocSig>,
+    pub struct_docs: Vec<DocSig>,
+    pub fn_docs: Vec<DocSig>,
+}
+
+impl Document for ModuleDoc {
+    fn render(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, r#"
+(from crate {})
+=== {}()
+------------------------------------------------------------------------------
+  {}
+
+------------------------------------------------------------------------------
+
+{}
+"#, self.crate_info, self.path, self.signature, self.docstring)
+    }
+}
+
+impl Display for ModuleDoc {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.render(f)
+    }
+}
+
 /// All documentation information for a struct.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct StructDoc {
@@ -265,7 +301,6 @@ pub struct StructDoc {
 
 impl Document for StructDoc {
     fn render(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        // TODO: docstrings are currently not built into the AST.
         write!(f, r#"
 (from crate {})
 === {}()
@@ -303,7 +338,6 @@ pub struct FnDoc {
 
 impl Document for FnDoc {
     fn render(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        // TODO: docstrings are currently not built into the AST.
         let info = match self.ty {
             FnKind::ItemFn => format!("{}()", self.path),
             FnKind::Method => format!("(impl on {})", self.path.parent().unwrap()),

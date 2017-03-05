@@ -367,6 +367,10 @@ impl<'v> Visitor<'v> for RustdocCacher<'v> {
         visit::walk_struct_def(self, var);
     }
 
+    fn visit_mod(&mut self, m: &'ast Mod, _s: Span, _n: NodeId) {
+        visit::walk_mod(self, m);
+    }
+
     fn visit_item(&mut self, item: &'v ast::Item) {
         // Keep track of the path we're in as we traverse modules.
         match item.node {
