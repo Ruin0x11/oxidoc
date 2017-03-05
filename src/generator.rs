@@ -628,4 +628,65 @@ mod test {
         let f = &"print_val_plus_two".to_string();
         assert!(functions.contains(f));
     }
+
+    /// github issue #3
+    #[test]
+    fn test_use_super() {
+        let _ = env_logger::init();
+        let store = test_harness(r#"
+        pub mod a {
+            pub struct MyStruct;
+
+            pub mod b {
+                use super::MyStruct;
+
+                impl MyStruct {
+                    // Documentation for test_a.
+                    pub fn test_a(&self) {
+                        println!("Hello, world!");
+                    }
+                }
+            }
+        }
+
+        fn main() {
+            let test = a::MyStruct;
+            test.test_a();
+
+        }
+        "#).unwrap();
+        let functions = store.get_functions(&ModPath::from("test::a::MyStruct".to_string())).unwrap();
+        let f = &"test_a".to_string();
+        assert!(functions.contains(f));
+    }
+
+    /// github issue #2
+    #[test]
+    fn test_use_globbed() {
+        let _ = env_logger::init();
+        let store = test_harness(r#"
+        pub mod a {
+            pub struct MyStruct;
+        }
+
+        pub mod b {
+            use a::*;
+
+            impl MyStruct {
+                /// Documentation for test_a.
+                pub fn test_a(&self) {
+                    println!("Hello, world!");
+                }
+            }
+        }
+
+        fn main() {
+            let one = a::MyStruct;
+            one.test_a();
+        }
+        "#).unwrap();
+        let functions = store.get_functions(&ModPath::from("test::a::MyStruct".to_string())).unwrap();
+        let f = &"test_a".to_string();
+        assert!(functions.contains(f));
+    }
 }
