@@ -383,7 +383,6 @@ impl<'v> Visitor<'v> for RustdocCacher<'v> {
             },
             ast::ItemKind::Use(ref vp) => {
                 self.add_use_namespaces(vp);
-                println!("namespaces: {:?}", self.used_namespaces);
             },
             ast::ItemKind::Impl(_, _, _, _, _, _) |
             ast::ItemKind::DefaultImpl(_, _) => {
