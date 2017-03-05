@@ -243,7 +243,7 @@ impl Display for CrateInfo {
 }
 
 pub trait Documentable {
-    fn get_info(&self, path: &ModPath, f: &mut fmt::Formatter) -> String;
+    fn get_info(&self, path: &ModPath) -> String;
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -266,7 +266,7 @@ impl<T: Documentable> Document<T> {
 ------------------------------------------------------------------------------
 
 {}
-"#, self.crate_info, self.path, self.signature, self.docstring)
+"#, self.crate_info, self.doc.get_info(&self.path), self.signature, self.docstring)
     }
 }
 
@@ -283,8 +283,8 @@ pub struct StructDoc_ {
 }
 
 impl Documentable for StructDoc_ {
-    fn get_info(&self, path: &ModPath, f: &mut fmt::Formatter) -> String {
-        "".to_string()
+    fn get_info(&self, path: &ModPath) -> String {
+        path.to_string()
     }
 }
 
@@ -302,7 +302,7 @@ pub struct FnDoc_ {
 }
 
 impl Documentable for FnDoc_ {
-    fn get_info(&self, path: &ModPath, f: &mut fmt::Formatter) -> String {
+    fn get_info(&self, path: &ModPath) -> String {
         match self.ty {
             FnKind::ItemFn => format!("{}()", path),
             FnKind::Method => format!("(impl on {})", path.parent().unwrap()),
