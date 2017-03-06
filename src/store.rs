@@ -123,11 +123,12 @@ impl Store {
     }
 
     /// Attempt to load the function at 'loc' from the store.
-    pub fn load_module(&self, scope: &ModPath, identifier: &String) -> Result<ModuleDoc> {
+    pub fn load_module(&self, scope: &ModPath) -> Result<ModuleDoc> {
+        let identifier = scope.name().unwrap().identifier.clone();
         let encoded_name = paths::encode_doc_filename(&identifier)
             .chain_err(|| format!("Failed to encode StoreLoc identifier {}", identifier))?;
         let doc_path = self.path.join(scope.to_path())
-            .join(format!("{}/mdesc-{}.odoc", identifier, encoded_name));
+            .join(format!("mdesc-{}.odoc", encoded_name));
         info!("Looking for {}", &doc_path.display());
         let mut fp = File::open(&doc_path)
             .chain_err(|| format!("Couldn't find oxidoc store {}", doc_path.display()))?;
@@ -212,22 +213,7 @@ impl Store {
     }
 
     pub fn add_module(&mut self, module_doc: ModuleDoc) {
-        let parent = module_doc.path.parent().unwrap();
-
-        if let Some(list) = self.structs.get_mut(&parent) {
-            let identifier = module_doc.path.name().unwrap().identifier.clone();
-            list.insert(identifier);
-        }
-        if let None = self.structs.get(&parent) {
-            let identifier = module_doc.path.name().unwrap().identifier.clone();
-            let mut s = HashSet::new();
-            s.insert(identifier);
-            self.structs.insert(parent, s);
-        }
-
-        info!("Module {} contains struct {}", module_doc.path.parent().unwrap().to_string(),
-                 module_doc.path.name().unwrap().identifier);
-
+        println!("Add module {:?}", module_doc);
         self.module_docs.push(module_doc);
     }
 

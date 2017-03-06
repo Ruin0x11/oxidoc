@@ -126,10 +126,10 @@ struct RustdocCacher<'v> {
     used_namespaces: Vec<HashMap<String, ModPath>>
 }
 
-/// Possibly retrives a docstring for the specified Item.
-pub fn get_doc(item: &ast::Item) -> Option<String> {
+/// Possibly retrives a docstring for the specified attributes.
+pub fn get_doc(attrs: &Vec<ast::Attribute>) -> Option<String> {
     let mut doc = String::new();
-    let mut attrs = item.attrs.iter().filter(|at| at.check_name("doc")).peekable();
+    let mut attrs = attrs.iter().filter(|at| at.check_name("doc")).peekable();
     if let None = attrs.peek() {
         return None;
     }
@@ -421,7 +421,7 @@ impl<'v> Visitor<'v> for RustdocCacher<'v> {
 
         self.items.push(item);
 
-        if let Some(doc) = get_doc(&item) {
+        if let Some(doc) = get_doc(&item.attrs) {
             self.docstrings.push(doc);
         }
 
@@ -493,6 +493,24 @@ fn generate_doc_cache(krate: &ast::Crate, crate_info: CrateInfo) -> Result<Store
 
     // Also add the crate's namespace as a known documentation path
     visitor.store.add_modpath(visitor.current_scope.clone());
+
+    // And add the crate itself as documentation
+    let doc = match get_doc(&krate.attrs) {
+        Some(d) => d,
+        None    => "".to_string(),
+    };
+
+    visitor.store.add_module(Document{
+            crate_info: visitor.crate_info.clone(),
+            path: visitor.current_scope.clone(),
+            signature: format!("crate {}", visitor.crate_info.package.name),
+            docstring: doc,
+            doc: ModuleDoc_ {
+                fn_docs: Vec::new(),
+                struct_docs: Vec::new(),
+                module_docs: Vec::new(),
+            }
+    });
 
     // Create a list of 'use'd namespaces for the crate's namespace
     visitor.used_namespaces.push(HashMap::new());
@@ -642,6 +660,26 @@ mod test {
                                        &"MyStruct".to_string()).unwrap();
         assert_eq!(strukt.docstring, "/// Documentation for MyStruct.\n/// It is nice.".to_string());
     }
+
+    #[test]
+    fn test_get_doc_module() {
+        let _ = env_logger::init();
+        let store = test_harness(r#"
+        //! Crate documentation.
+        //! A test crate.
+
+        mod a {
+          //! module a
+          //! is a module
+        }
+        "#).unwrap();
+        store.save().unwrap();
+        let module = store.load_module(&ModPath::from("test".to_string())).unwrap();
+        assert_eq!(module.docstring, "//! Crate documentation.\n//! A test crate.".to_string());
+        let module = store.load_module(&ModPath::from("test::a".to_string())).unwrap();
+        assert_eq!(module.docstring, "//! module a\n//! is a module".to_string());
+    }
+
 
     #[test]
     fn test_get_doc_use() {

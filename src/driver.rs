@@ -142,13 +142,13 @@ impl Driver {
     fn load_modules_matching(&self, name: &DocSig) -> Result<Vec<ModuleDoc>> {
         let mut found = Vec::new();
         for loc in self.stores_containing(name).unwrap() {
-            if let Ok(strukt) = loc.store.load_module(&loc.scope, &loc.identifier) {
-                info!("Found the struct {} looking for {}", &strukt, &name);
-                found.push(strukt);
+            if let Ok(module) = loc.store.load_module(&loc.scope) {
+                info!("Found the module {} looking for {}", &module, &name);
+                found.push(module);
             }
         }
         if found.len() == 0 {
-            bail!("No structs matched name {}", name);
+            bail!("No modules matched name {}", name);
         }
         Ok(found)
     }
