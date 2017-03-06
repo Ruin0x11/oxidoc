@@ -1,3 +1,8 @@
+use serde::ser::{Serialize};
+use serde::de::{Deserialize};
+use std::fs::{File, create_dir_all};
+use std::io::{Read, Write};
+use serde_json;
 use std::fmt::{self, Display};
 use std::path::{Path, PathBuf};
 use syntax::ast;
@@ -6,6 +11,8 @@ use syntax::codemap::Spanned;
 use syntax::codemap::{Span};
 use syntax::print::pprust;
 use syntax::visit;
+use paths;
+use store::Store;
 
 use ::errors::*;
 
@@ -244,6 +251,7 @@ impl Display for CrateInfo {
 
 pub trait Documentable {
     fn get_info(&self, path: &ModPath) -> String;
+    fn get_filename(&self, name: String) -> String;
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -255,7 +263,7 @@ pub struct Document<T: Documentable> {
     pub docstring: String,
 }
 
-impl<T: Documentable> Document<T> {
+impl<T: Documentable + Serialize + Deserialize> Document<T> {
     fn render(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, r#"
 (from crate {})
@@ -268,9 +276,70 @@ impl<T: Documentable> Document<T> {
 {}
 "#, self.crate_info, self.doc.get_info(&self.path), self.signature, self.docstring)
     }
+
+    pub fn get_filename(&self) -> Result<String> {
+        let docfile = paths::encode_doc_filename(&self.path.name().unwrap().identifier)
+            .chain_err(|| "Could not encode doc filename")?;
+
+        Ok(self.doc.get_filename(docfile))
+    }
+
+    fn get_docfile(&self, store_path: &PathBuf) -> Result<PathBuf> {
+        let parent = self.path.parent().unwrap().to_path();
+
+        let name = self.get_filename()
+            .chain_err(|| "Could not resolve documentation filename")?;
+
+        let local_path = parent.join(name);
+        Ok(store_path.join(local_path))
+    }
+
+    /// Writes a .odoc JSON store to disk.
+    pub fn save_doc(&self, path: &PathBuf) -> Result<PathBuf> {
+        let json = serde_json::to_string(&self).unwrap();
+
+        let outfile = self.get_docfile(path)
+            .chain_err(|| format!("Could not obtain docfile path inside {}", path.display()))?;
+
+        create_dir_all(outfile.parent().unwrap())
+            .chain_err(|| format!("Failed to create module dir {}", path.display()))?;
+
+        let mut fp = File::create(&outfile)
+            .chain_err(|| format!("Could not write function odoc file {}", outfile.display()))?;
+        fp.write_all(json.as_bytes())
+            .chain_err(|| format!("Failed to write to function odoc file {}", outfile.display()))?;
+
+        // Insert the module name into the list of known module names
+
+        info!("Wrote fn doc to {}", &outfile.display());
+
+        Ok(outfile)
+    }
+
+    /// Attempt to load the function at 'loc' from the store.
+    pub fn load_doc(path: PathBuf, scope: &ModPath) -> Result<T> {
+        let identifier = scope.name().unwrap().identifier.clone();
+        let encoded_name = paths::encode_doc_filename(&identifier)
+            .chain_err(|| format!("Failed to encode StoreLoc identifier {}", identifier))?;
+        let doc_path = path.join(scope.to_path())
+            .join(format!("mdesc-{}.odoc", encoded_name));
+        info!("Looking for {}", &doc_path.display());
+        let mut fp = File::open(&doc_path)
+            .chain_err(|| format!("Couldn't find oxidoc store {}", doc_path.display()))?;
+
+        let mut json = String::new();
+        fp.read_to_string(&mut json)
+            .chain_err(|| format!("Couldn't read oxidoc store {}", doc_path.display()))?;
+
+        info!("Loading {}", doc_path.display());
+        let doc: T = serde_json::from_str(&json)
+            .chain_err(|| "Couldn't parse oxidoc store (regen probably needed)")?;
+
+        Ok(doc)
+    }
 }
 
-impl<T: Documentable> Display for Document<T> {
+impl<T: Documentable + Serialize + Deserialize> Display for Document<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         self.render(f)
     }
@@ -286,11 +355,14 @@ impl Documentable for StructDoc_ {
     fn get_info(&self, path: &ModPath) -> String {
         path.to_string()
     }
+    fn get_filename(&self, name: String) -> String {
+        format!("sdesc-{}", name)
+    }
 }
 
 pub type StructDoc = Document<StructDoc_>;
 
-/// All documentation inormation for a function.
+/// All documentation information for a function.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct FnDoc_ {
     pub unsafety: Unsafety,
@@ -310,6 +382,9 @@ impl Documentable for FnDoc_ {
             FnKind::MethodFromTrait => format!("<from trait>"),
         }
     }
+    fn get_filename(&self, name: String) -> String {
+        format!("{}", name)
+    }
 }
 
 pub type FnDoc = Document<FnDoc_>;
@@ -325,6 +400,9 @@ pub struct ModuleDoc_ {
 impl Documentable for ModuleDoc_ {
     fn get_info(&self, path: &ModPath) -> String {
         path.to_string()
+    }
+    fn get_filename(&self, name: String) -> String {
+        format!("mdesc-{}", name)
     }
 }
 

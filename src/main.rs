@@ -2,6 +2,7 @@
 extern crate clap;
 extern crate toml;
 extern crate syntex_syntax as syntax;
+extern crate serde;
 extern crate serde_json;
 #[macro_use]
 extern crate serde_derive;
