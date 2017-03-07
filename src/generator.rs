@@ -276,7 +276,6 @@ impl<'v> RustdocCacher<'v> {
 
                 let sig = pprust::to_string(|s| s.print_method_sig(id, &m, &visibility));
 
-
                 let doc = match self.docstrings.pop() {
                     Some(d) => d.to_string(),
                     None    => "".to_string(),

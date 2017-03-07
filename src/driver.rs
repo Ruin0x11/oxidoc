@@ -68,18 +68,19 @@ impl Driver {
     fn display_name(&self, name: &ModPath) -> Result<()> {
         // TODO: Currently looking for everything blindly.
         if let Ok(x) = self.display_doc::<ModuleDoc_>(name) {
-            return Ok(x)
+            // return Ok(x)
         }
 
         if let Ok(x) = self.display_doc::<StructDoc_>(name) {
-            return Ok(x)
+            // return Ok(x)
         }
 
         if let Ok(x) = self.display_doc::<FnDoc_>(name) {
-            return Ok(x)
+            // return Ok(x)
         }
 
-        bail!(ErrorKind::NoDocumentationFound)
+        Ok(())
+        // bail!(ErrorKind::NoDocumentationFound)
     }
 
     /// Attempts to find a fn named 'name' in the oxidoc stores and print its documentation.
