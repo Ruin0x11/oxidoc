@@ -183,7 +183,8 @@ impl ModPath {
     /// All but the final segment of the path.
     pub fn parent(&self) -> Option<ModPath> {
         let mut n = self.clone();
-        if let Some(_) = n.0.pop() {
+        n.0.pop();
+        if let Some(_) = n.0.iter().next() {
             Some(ModPath(n.0))
         } else {
             None
@@ -251,7 +252,7 @@ impl Display for CrateInfo {
 
 pub trait Documentable {
     fn get_info(&self, path: &ModPath) -> String;
-    fn get_filename(&self, name: String) -> String;
+    fn get_filename(name: String) -> String;
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -281,17 +282,31 @@ impl<T: Documentable + Serialize + Deserialize> Document<T> {
         let docfile = paths::encode_doc_filename(&self.path.name().unwrap().identifier)
             .chain_err(|| "Could not encode doc filename")?;
 
-        Ok(self.doc.get_filename(docfile))
+        info!("Encoded name as {}", docfile);
+
+        Ok(T::get_filename(docfile))
     }
 
     fn get_docfile(&self, store_path: &PathBuf) -> Result<PathBuf> {
-        let parent = self.path.parent().unwrap().to_path();
+        println!("Attempting to write docfile under {} for {}", store_path.display(), self.path);
+        let parent = self.path.parent();
 
         let name = self.get_filename()
             .chain_err(|| "Could not resolve documentation filename")?;
 
-        let local_path = parent.join(name);
-        Ok(store_path.join(local_path))
+        let doc_path = match parent {
+            Some(par) => {
+                let local_path = par.to_path().join(name);
+                store_path.join(local_path)
+            }
+            None => {
+                // TODO: Crates need to be handled seperately.
+                // This is the crate's documentation, which lives directly under the store path.
+                store_path.join(name)
+            }
+        };
+
+        Ok(doc_path)
     }
 
     /// Writes a .odoc JSON store to disk.
@@ -311,19 +326,23 @@ impl<T: Documentable + Serialize + Deserialize> Document<T> {
 
         // Insert the module name into the list of known module names
 
-        info!("Wrote fn doc to {}", &outfile.display());
+        info!("Wrote doc to {}", &outfile.display());
 
         Ok(outfile)
     }
 
-    /// Attempt to load the function at 'loc' from the store.
-    pub fn load_doc(path: PathBuf, scope: &ModPath) -> Result<T> {
-        let identifier = scope.name().unwrap().identifier.clone();
+    /// Attempt to load the documentation at 'scope' from the store.
+    pub fn load_doc(path: PathBuf, full_path: &ModPath) -> Result<Self> {
+        let identifier = full_path.name().unwrap().identifier.clone();
         let encoded_name = paths::encode_doc_filename(&identifier)
-            .chain_err(|| format!("Failed to encode StoreLoc identifier {}", identifier))?;
+            .chain_err(|| "Could not encode doc filename")?;
+
+        let scope = full_path.parent().unwrap();
+
         let doc_path = path.join(scope.to_path())
-            .join(format!("mdesc-{}.odoc", encoded_name));
-        info!("Looking for {}", &doc_path.display());
+            .join(T::get_filename(encoded_name));
+
+        info!("Attempting to load doc at {}", &doc_path.display());
         let mut fp = File::open(&doc_path)
             .chain_err(|| format!("Couldn't find oxidoc store {}", doc_path.display()))?;
 
@@ -332,7 +351,7 @@ impl<T: Documentable + Serialize + Deserialize> Document<T> {
             .chain_err(|| format!("Couldn't read oxidoc store {}", doc_path.display()))?;
 
         info!("Loading {}", doc_path.display());
-        let doc: T = serde_json::from_str(&json)
+        let doc: Self = serde_json::from_str(&json)
             .chain_err(|| "Couldn't parse oxidoc store (regen probably needed)")?;
 
         Ok(doc)
@@ -355,8 +374,8 @@ impl Documentable for StructDoc_ {
     fn get_info(&self, path: &ModPath) -> String {
         path.to_string()
     }
-    fn get_filename(&self, name: String) -> String {
-        format!("sdesc-{}", name)
+    fn get_filename(name: String) -> String {
+        format!("sdesc-{}.odoc", name)
     }
 }
 
@@ -382,8 +401,8 @@ impl Documentable for FnDoc_ {
             FnKind::MethodFromTrait => format!("<from trait>"),
         }
     }
-    fn get_filename(&self, name: String) -> String {
-        format!("{}", name)
+    fn get_filename(name: String) -> String {
+        format!("{}.odoc", name)
     }
 }
 
@@ -401,8 +420,8 @@ impl Documentable for ModuleDoc_ {
     fn get_info(&self, path: &ModPath) -> String {
         path.to_string()
     }
-    fn get_filename(&self, name: String) -> String {
-        format!("mdesc-{}", name)
+    fn get_filename(name: String) -> String {
+        format!("mdesc-{}.odoc", name)
     }
 }
 

@@ -629,14 +629,13 @@ mod test {
             }
         }"#).unwrap();
         store.save().unwrap();
-        let function = store.load_function(&ModPath::from("test::a::b".to_string()),
-                                           &"thing".to_string()).unwrap();
+        let function = store.load_doc::<FnDoc_>(&ModPath::from("test::a::b::thing".to_string())).unwrap();
+
         assert_eq!(function.docstring, "".to_string());
-        let function = store.load_function(&ModPath::from("test::a::b::Mine".to_string()),
-                                           &"print_val".to_string()).unwrap();
+        let function = store.load_doc::<FnDoc_>(&ModPath::from("test::a::b::Mine::print_val".to_string())).unwrap();
         assert_eq!(function.docstring, "/// Prints this struct's value.\n/// Mildly useful.".to_string());
-        let function = store.load_function(&ModPath::from("test::a::b::Mine".to_string()),
-                                           &"print_val_plus_2".to_string()).unwrap();
+        let function = store.load_doc::<FnDoc_>(&ModPath::from("test::a::b::Mine::print_val_plus_2".to_string())).unwrap();
+                                           
         assert_eq!(function.docstring, "/// Prints this struct's value plus 2.\n/// Somewhat useful.".to_string());
     }
 
@@ -653,11 +652,9 @@ mod test {
         struct MyStruct;
         "#).unwrap();
         store.save().unwrap();
-        let strukt = store.load_struct(&ModPath::from("test".to_string()),
-                                       &"UndoccedStruct".to_string()).unwrap();
+        let strukt = store.load_doc::<StructDoc_>(&ModPath::from("test::UndoccedStruct".to_string())).unwrap();
         assert_eq!(strukt.docstring, "".to_string());
-        let strukt = store.load_struct(&ModPath::from("test".to_string()),
-                                       &"MyStruct".to_string()).unwrap();
+        let strukt = store.load_doc::<StructDoc_>(&ModPath::from("test::MyStruct".to_string())).unwrap();
         assert_eq!(strukt.docstring, "/// Documentation for MyStruct.\n/// It is nice.".to_string());
     }
 
@@ -674,9 +671,9 @@ mod test {
         }
         "#).unwrap();
         store.save().unwrap();
-        let module = store.load_module(&ModPath::from("test".to_string())).unwrap();
+        let module = store.load_doc::<ModuleDoc_>(&ModPath::from("test".to_string())).unwrap();
         assert_eq!(module.docstring, "//! Crate documentation.\n//! A test crate.".to_string());
-        let module = store.load_module(&ModPath::from("test::a".to_string())).unwrap();
+        let module = store.load_doc::<ModuleDoc_>(&ModPath::from("test::a".to_string())).unwrap();
         assert_eq!(module.docstring, "//! module a\n//! is a module".to_string());
     }
 

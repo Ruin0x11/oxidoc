@@ -1,4 +1,5 @@
 use serde::ser::{Serialize};
+use serde::de::{Deserialize};
 use serde_json;
 use document::Documentable;
 
@@ -12,11 +13,11 @@ use ::errors::*;
 use document::*;
 use paths;
 
+/// Defines an exact location a documentation file can be found.
 #[derive(Debug)]
 pub struct StoreLoc<'a> {
     pub store: &'a Store,
-    pub scope: ModPath,
-    pub identifier: String,
+    pub path: ModPath,
 }   
 
 /// Gets the fully qualified output directory for the current module scope.
@@ -123,22 +124,21 @@ impl Store {
 
     /// Add a module's path to the list of known modules in this store.
     pub fn add_modpath(&mut self, scope: ModPath) {
-        info!("Add Module: {}", scope);
         self.modpaths.insert(scope);
     }
 
     fn add_all_modpaths(&mut self, scope: &ModPath) {
         let mut parent = scope.parent();
         while let Some(path) = parent {
-            info!("Add module path {}", &path);
             parent = path.parent();
             self.modpaths.insert(path);
         }
     }
 
-    pub fn load_doc(&self, scope: &ModPath) -> Result<Box<Documentable>> {
-        match Document::load_doc(self.path, scope) {
-            Ok(doc) => Ok(Box::new(doc)),
+    pub fn load_doc<T: Documentable + Serialize + Deserialize>(&self, doc_path: &ModPath) -> Result<Document<T>> {
+        info!("Store path: {}, Doc path: {}", &self.path.display(), &doc_path);
+        match Document::load_doc(self.path.clone(), doc_path) {
+            Ok(doc) => Ok(doc),
             Err(e) => Err(e)
         }
     }

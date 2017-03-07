@@ -1,3 +1,5 @@
+use serde::ser::{Serialize};
+use serde::de::{Deserialize};
 use paths;
 use store::*;
 use ::errors::*;
@@ -14,20 +16,9 @@ error_chain! {
     }
 }
 
-fn expand_name(name: &String) -> Result<DocSig> {
+fn expand_name(name: &String) -> Result<ModPath> {
     let segs = ModPath::from(name.clone());
-    let fn_sig = if segs.0.len() == 1 {
-        DocSig {
-            scope: None,
-            identifier: segs.name().unwrap().identifier,
-        }
-    } else {
-        DocSig {
-            scope: Some(segs.parent().unwrap()),
-            identifier: segs.name().unwrap().identifier 
-        }
-    };
-    Ok(fn_sig)
+    Ok(segs)
 }
 
 pub struct Driver {
@@ -73,77 +64,46 @@ impl Driver {
         Ok(())
     }
 
-    /// Takes a name, determines what kind of documentation it is referring to, and displays it.
-    fn display_name(&self, name: &DocSig) -> Result<()> {
-        if let Ok(x) = self.display_module(name) {
+    /// Takes a module path, determines what kind of documentation it is referring to, and displays it.
+    fn display_name(&self, name: &ModPath) -> Result<()> {
+        // TODO: Currently looking for everything blindly.
+        if let Ok(x) = self.display_doc::<ModuleDoc_>(name) {
             return Ok(x)
         }
 
-        if let Ok(x) = self.display_struct(name) {
+        if let Ok(x) = self.display_doc::<StructDoc_>(name) {
             return Ok(x)
         }
 
-        if let Ok(x) = self.display_function(name) {
+        if let Ok(x) = self.display_doc::<FnDoc_>(name) {
             return Ok(x)
         }
 
         bail!(ErrorKind::NoDocumentationFound)
     }
 
-    /// Attempts to find a module named 'name' in the oxidoc stores and print its documentation.
-    fn display_module(&self, name: &DocSig) -> Result<()> {
-        // TODO: Attempt to filter here for a single match
-        // If no match, list functions that have similar names
-        let module_docs = self.load_modules_matching(&name).
-            chain_err(|| format!("No structs match the given name {}", &name))?;
-
-        println!("= {}", &name);
-
-        for module_doc in module_docs {
-            // TODO: document construction should happen
-            println!("{}", &module_doc);
-        }
-        Ok(())
-    }
-
-    /// Attempts to find a struct named 'name' in the oxidoc stores and print its documentation.
-    fn display_struct(&self, name: &DocSig) -> Result<()> {
-        // TODO: Attempt to filter here for a single match
-        // If no match, list structs that have similar names
-        let struct_docs = self.load_structs_matching(&name).
-            chain_err(|| format!("No structs match the given name {}", &name))?;
-
-        println!("= {}", &name);
-
-        for struct_doc in struct_docs {
-            // TODO: document construction should happen
-            println!("{}", &struct_doc);
-        }
-        Ok(())
-    }
-
     /// Attempts to find a fn named 'name' in the oxidoc stores and print its documentation.
-    fn display_function(&self, name: &DocSig) -> Result<()> {
+    fn display_doc<T: Documentable + Serialize + Deserialize>(&self, name: &ModPath) -> Result<()> {
         // TODO: Attempt to filter here for a single match
         // If no match, list functions that have similar names
-        let fn_docs = self.load_functions_matching(&name).
-            chain_err(|| format!("No functions match the given name {}", &name))?;
+        let docs = self.load_docs_matching::<T>(&name).
+            chain_err(|| format!("No documents match the given name {}", &name))?;
 
         println!("= {}", &name);
 
-        for fn_doc in fn_docs {
+        for doc in docs {
             // TODO: document construction should happen
-            println!("{}", &fn_doc);
+            println!("{}", &doc);
         }
         Ok(())
     }
 
-    /// Obtains documentation for structs with the identifier 'name'
-    fn load_modules_matching(&self, name: &DocSig) -> Result<Vec<ModuleDoc>> {
+    fn load_docs_matching<T: Documentable + Serialize + Deserialize>(&self, name: &ModPath) -> Result<Vec<Document<T>>> {
         let mut found = Vec::new();
         for loc in self.stores_containing(name).unwrap() {
-            if let Ok(module) = loc.store.load_module(&loc.scope) {
-                info!("Found the module {} looking for {}", &module, &name);
+            let full_path = ModPath::join(&loc.path, name);
+            if let Ok(module) = loc.store.load_doc::<T>(&full_path) {
+                info!("Found the documentation {} looking for {}", &module, &name);
                 found.push(module);
             }
         }
@@ -151,46 +111,18 @@ impl Driver {
             bail!("No modules matched name {}", name);
         }
         Ok(found)
-    }
-
-    /// Obtains documentation for structs with the identifier 'name'
-    fn load_structs_matching(&self, name: &DocSig) -> Result<Vec<StructDoc>> {
-        let mut found = Vec::new();
-        for loc in self.stores_containing(name).unwrap() {
-            if let Ok(strukt) = loc.store.load_struct(&loc.scope, &loc.identifier) {
-                info!("Found the struct {} looking for {}", &strukt, &name);
-                found.push(strukt);
-            }
-        }
-        if found.len() == 0 {
-            bail!("No structs matched name {}", name);
-        }
-        Ok(found)
-    }
-
-    /// Obtains documentation for functions with the signature 'name'
-    fn load_functions_matching(&self, name: &DocSig) -> Result<Vec<FnDoc>> {
-        let mut found = Vec::new();
-        for loc in self.stores_containing(name).unwrap() {
-            if let Ok(function) = loc.store.load_function(&loc.scope, &loc.identifier) {
-                info!("Found the function {} looking for {}", &function, &name);
-                found.push(function);
-            }
-        }
-        if found.len() == 0 {
-            bail!("No functions matched name {}", name);
-        }
-        Ok(found)
+        
     }
 
     /// Obtains a list of oxidoc stores the given documentation identifier could possibly exist in.
-    fn stores_containing(&self, sig: &DocSig) -> Result<Vec<StoreLoc>> {
+    fn stores_containing(&self, path: &ModPath) -> Result<Vec<StoreLoc>> {
         let mut stores = Vec::new();
         let mut results = Vec::new();
 
-        info!("looking for store that has {}", &sig);
+        info!("looking for store that has {}", &path);
 
-        match sig.scope {
+        let parent = path.parent();
+        match parent {
             None => {
                 info!("Looking through everything");
                 // user gave name without path, look through all crate folders and their modules
@@ -204,8 +136,7 @@ impl Driver {
                     for scope in store.get_modpaths() {
                         results.push(StoreLoc{
                             store: store,
-                            scope: scope.clone(),
-                            identifier: sig.identifier.clone()
+                            path: scope.clone(),
                         });
                     }
                 }
@@ -221,8 +152,7 @@ impl Driver {
                         info!("Store found! {}", store.path.display());
                         results.push(StoreLoc{
                             store: store,
-                            scope: scope.clone(),
-                            identifier: sig.identifier.clone()
+                            path: path.clone(),
                         });
                     }
                     None => {
@@ -241,19 +171,4 @@ impl Driver {
 #[cfg(test)]
 mod test {
     use super::*;
-
-    #[test]
-    fn test_expand_name() {
-        let s = &"root::a::b".to_string();
-        assert_eq!(expand_name(s).unwrap(), DocSig{
-            scope: Some(ModPath::from("root::a".to_string())),
-            identifier: "b".to_string()
-        });
-
-        let s = &"run".to_string();
-        assert_eq!(expand_name(s).unwrap(), DocSig{
-            scope: None,
-            identifier: "run".to_string()
-        });
-    }
 }
