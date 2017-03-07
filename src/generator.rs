@@ -508,107 +508,112 @@ fn get_crate_doc_path(crate_info: &CrateInfo) -> Result<PathBuf> {
     Ok(path)
 }
 
-                                                        /// Generates documentation for the given crate.
-                                                        fn generate_doc_cache(krate: &ast::Crate, crate_info: CrateInfo) -> Result<Store> {
+/// Generates documentation for the given crate.
+fn generate_doc_cache(krate: &ast::Crate, crate_info: CrateInfo) -> Result<Store> {
 
-                                                            let crate_doc_path = get_crate_doc_path(&crate_info)
-                                                                .chain_err(|| format!("Unable to get crate doc path for crate: {}", &crate_info.package.name))?;
+    let crate_doc_path = get_crate_doc_path(&crate_info)
+        .chain_err(|| format!("Unable to get crate doc path for crate: {}", &crate_info.package.name))?;
 
-                                                            // Clear out old doc path
-                                                            if crate_doc_path.exists() {
-                                                                remove_dir_all(&crate_doc_path);
-                                                            }
+    // Clear out old doc path
+    if crate_doc_path.exists() {
+        remove_dir_all(&crate_doc_path);
+    }
 
-                                                            let mut visitor = RustdocCacher {
-                                                                store: Store::new(crate_doc_path).unwrap(),
-                                                                current_scope: ModPath(Vec::new()),
-                                                                crate_info: crate_info.clone(),
-                                                                items: Vec::new(),
-                                                                docstrings: Vec::new(),
-                                                                used_namespaces: Vec::new(),
-                                                                is_part_of_use: false,
-                                                            };
+    let mut visitor = RustdocCacher {
+        store: Store::new(crate_doc_path).unwrap(),
+        current_scope: ModPath(Vec::new()),
+        crate_info: crate_info.clone(),
+        items: Vec::new(),
+        docstrings: Vec::new(),
+        used_namespaces: Vec::new(),
+        is_part_of_use: false,
+    };
 
-                                                            // Push the crate name onto the current namespace so
-                                                            // the module "module" will resolve to "crate::module"
-                                                            visitor.current_scope.push(PathSegment{
-                                                                identifier: crate_info.package.name.clone()
-                                                            });
+    // Push the crate name onto the current namespace so
+    // the module "module" will resolve to "crate::module"
+    visitor.current_scope.push(PathSegment{
+        identifier: crate_info.package.name.clone()
+    });
 
-                                                            // Also add the crate's namespace as a known documentation path
-                                                            visitor.store.add_modpath(visitor.current_scope.clone());
+    // Also add the crate's namespace as a known documentation path
+    visitor.store.add_modpath(visitor.current_scope.clone());
 
-                                                            // And add the crate itself as documentation
-                                                            let doc = match get_doc(&krate.attrs) {
-                                                                Some(d) => d,
-                                                                None    => "".to_string(),
-                                                            };
+    // And add the crate itself as documentation
+    let doc = match get_doc(&krate.attrs) {
+        Some(d) => {
+            info!("Crate doc: {}", d);
+            d
+        },
+        None    => "".to_string(),
+    };
 
-                                                            visitor.store.add_module(Document{
-                                                                crate_info: visitor.crate_info.clone(),
-                                                                path: visitor.current_scope.clone(),
-                                                                signature: format!("crate {}", visitor.crate_info.package.name),
-                                                                docstring: doc,
-                                                                doc: ModuleDoc_ {
-                                                                    fn_docs: Vec::new(),
-                                                                    struct_docs: Vec::new(),
-                                                                    module_docs: Vec::new(),
-                                                                }
-                                                            });
+    visitor.docstrings.push(doc);
 
-                                                            // Create a list of 'use'd namespaces for the crate's namespace
-                                                            visitor.used_namespaces.push(HashMap::new());
+    // visitor.store.add_module(Document{
+    //     crate_info: visitor.crate_info.clone(),
+    //     path: visitor.current_scope.clone(),
+    //     signature: format!("crate {}", visitor.crate_info.package.name),
+    //     docstring: doc,
+    //     doc: ModuleDoc_ {
+    //         fn_docs: Vec::new(),
+    //         struct_docs: Vec::new(),
+    //         module_docs: Vec::new(),
+    //     }
+    // });
 
-                                                            visitor.visit_mod(&krate.module, krate.span, ast::CRATE_NODE_ID);
+    // Create a list of 'use'd namespaces for the crate's namespace
+    visitor.used_namespaces.push(HashMap::new());
 
-                                                            Ok(visitor.store)
-                                                        }
+    visitor.visit_mod(&krate.module, krate.span, ast::CRATE_NODE_ID);
 
-                                                        #[cfg(test)]
-                                                        mod test {
-                                                            use super::*;
-                                                            use env_logger;
+    Ok(visitor.store)
+}
 
-                                                            fn test_harness(s: &str) -> Result<Store> {
-                                                                let parse_session = ParseSess::new();
-                                                                let krate = match parse::parse_crate_from_source_str("test.rs".to_string(), s.to_string(), &parse_session) {
-                                                                    Ok(_) if parse_session.span_diagnostic.has_errors() => bail!("Parse error"),
-                                                                    Ok(krate) => krate,
-                                                                    Err(_) => bail!("Failed to parse"),
-                                                                };
+#[cfg(test)]
+mod test {
+    use super::*;
+    use env_logger;
 
-                                                                let crate_info = CrateInfo {
-                                                                    package: Package {
-                                                                        name: "test".to_string(),
-                                                                        version: "1.0.0".to_string(),
-                                                                    }
-                                                                };
+    fn test_harness(s: &str) -> Result<Store> {
+        let parse_session = ParseSess::new();
+        let krate = match parse::parse_crate_from_source_str("test.rs".to_string(), s.to_string(), &parse_session) {
+            Ok(_) if parse_session.span_diagnostic.has_errors() => bail!("Parse error"),
+            Ok(krate) => krate,
+            Err(_) => bail!("Failed to parse"),
+        };
 
-                                                                generate_doc_cache(&krate, crate_info)
-                                                            }
+        let crate_info = CrateInfo {
+            package: Package {
+                name: "test".to_string(),
+                version: "1.0.0".to_string(),
+            }
+        };
+
+        generate_doc_cache(&krate, crate_info)
+    }
 
 
-                                                            #[test]
-                                                            fn test_has_modules() {
-                                                                let _ = env_logger::init();
-                                                                let store = test_harness(r#"
+    #[test]
+    fn test_has_modules() {
+        let _ = env_logger::init();
+        let store = test_harness(r#"
         mod a {
             mod b {
             }
         }"#).unwrap();
-                                                                let modules = store.get_modpaths();
-                                                                let p = &ModPath::from("test".to_string());
-                                                                assert!(modules.contains(p));
-                                                                let p = &ModPath::from("test::a".to_string());
-                                                                assert!(modules.contains(p));
-                                                                let p = &ModPath::from("test::a::b".to_string());
-                                                                assert!(modules.contains(p));
-                                                            }
+        let modules = store.get_modpaths();
+        let p = &ModPath::from("test".to_string());
+        assert!(modules.contains(p));
+        let p = &ModPath::from("test::a".to_string());
+        assert!(modules.contains(p));
+        let p = &ModPath::from("test::a::b".to_string());
+        assert!(modules.contains(p));
+    }
 
-                                                            #[test]
-                                                            fn test_module_has_fns() {
-                                                                let _ = env_logger::init();
-                                                                let store = test_harness(r#"
+    #[test]
+    fn test_module_has_fns() {
+        let _ = env_logger::init();
+        let store = test_harness(r#"
         fn main() {
           println!("inside main");
         }
@@ -630,23 +635,23 @@ fn get_crate_doc_path(crate_info: &CrateInfo) -> Result<PathBuf> {
                 }
             }
         }"#).unwrap();
-                                                                let functions = store.get_functions(&ModPath::from("test::a::b".to_string())).unwrap();
-                                                                let f = &"thing".to_string();
-                                                                assert!(functions.contains(f));
-                                                                let functions = store.get_functions(&ModPath::from("test".to_string())).unwrap();
-                                                                let f = &"main".to_string();
-                                                                assert!(functions.contains(f));
-                                                                let functions = store.get_functions(&ModPath::from("test::a::b::Mine".to_string())).unwrap();
-                                                                let f = &"print_val".to_string();
-                                                                assert!(functions.contains(f));
-                                                                let f = &"print_val_plus_two".to_string();
-                                                                assert!(functions.contains(f));
-                                                            }
+        let functions = store.get_functions(&ModPath::from("test::a::b".to_string())).unwrap();
+        let f = &"thing".to_string();
+        assert!(functions.contains(f));
+        let functions = store.get_functions(&ModPath::from("test".to_string())).unwrap();
+        let f = &"main".to_string();
+        assert!(functions.contains(f));
+        let functions = store.get_functions(&ModPath::from("test::a::b::Mine".to_string())).unwrap();
+        let f = &"print_val".to_string();
+        assert!(functions.contains(f));
+        let f = &"print_val_plus_two".to_string();
+        assert!(functions.contains(f));
+    }
 
-                                                            #[test]
-                                                            fn test_get_doc_fn() {
-                                                                let _ = env_logger::init();
-                                                                let store = test_harness(r#"
+    #[test]
+    fn test_get_doc_fn() {
+        let _ = env_logger::init();
+        let store = test_harness(r#"
         fn main() {
           println!("inside main");
         }
@@ -674,23 +679,23 @@ fn get_crate_doc_path(crate_info: &CrateInfo) -> Result<PathBuf> {
                 }
             }
         }"#).unwrap();
-                                                                store.save().unwrap();
-                                                                let function = store.load_doc::<FnDoc_>(&ModPath::from("test::a::b::thing".to_string())).unwrap();
+        store.save().unwrap();
+        let function = store.load_doc::<FnDoc_>(&ModPath::from("test::a::b::thing".to_string())).unwrap();
 
-                                                                assert_eq!(function.signature, "fn thing()".to_string());
-                                                                assert_eq!(function.docstring, "/// Prints a message.\n/// Sort of useful.".to_string());
-                                                                let function = store.load_doc::<FnDoc_>(&ModPath::from("test::a::b::Mine::print_val".to_string())).unwrap();
-                                                                assert_eq!(function.signature, "fn print_val(&self)".to_string());
-                                                                assert_eq!(function.docstring, "/// Prints this struct's value.\n/// Mildly useful.".to_string());
-                                                                let function = store.load_doc::<FnDoc_>(&ModPath::from("test::a::b::Mine::print_val_plus_two".to_string())).unwrap();
-                                                                assert_eq!(function.signature, "fn print_val_plus_two(&self)".to_string());
-                                                                assert_eq!(function.docstring, "/// Prints this struct's value plus 2.\n/// Somewhat useful.".to_string());
-                                                            }
+        assert_eq!(function.signature, "fn thing()".to_string());
+        assert_eq!(function.docstring, "/// Prints a message.\n/// Sort of useful.".to_string());
+        let function = store.load_doc::<FnDoc_>(&ModPath::from("test::a::b::Mine::print_val".to_string())).unwrap();
+        assert_eq!(function.signature, "fn print_val(&self)".to_string());
+        assert_eq!(function.docstring, "/// Prints this struct's value.\n/// Mildly useful.".to_string());
+        let function = store.load_doc::<FnDoc_>(&ModPath::from("test::a::b::Mine::print_val_plus_two".to_string())).unwrap();
+        assert_eq!(function.signature, "fn print_val_plus_two(&self)".to_string());
+        assert_eq!(function.docstring, "/// Prints this struct's value plus 2.\n/// Somewhat useful.".to_string());
+    }
 
-                                                            #[test]
-                                                            fn test_get_doc_struct() {
-                                                                let _ = env_logger::init();
-                                                                let store = test_harness(r#"
+    #[test]
+    fn test_get_doc_struct() {
+        let _ = env_logger::init();
+        let store = test_harness(r#"
         //! Crate documentation.
 
         struct UndoccedStruct;
@@ -699,17 +704,17 @@ fn get_crate_doc_path(crate_info: &CrateInfo) -> Result<PathBuf> {
         /// It is nice.
         struct MyStruct;
         "#).unwrap();
-                                                                store.save().unwrap();
-                                                                let strukt = store.load_doc::<StructDoc_>(&ModPath::from("test::UndoccedStruct".to_string())).unwrap();
-                                                                assert_eq!(strukt.docstring, "".to_string());
-                                                                let strukt = store.load_doc::<StructDoc_>(&ModPath::from("test::MyStruct".to_string())).unwrap();
-                                                                assert_eq!(strukt.docstring, "/// Documentation for MyStruct.\n/// It is nice.".to_string());
-                                                            }
+        store.save().unwrap();
+        let strukt = store.load_doc::<StructDoc_>(&ModPath::from("test::UndoccedStruct".to_string())).unwrap();
+        assert_eq!(strukt.docstring, "".to_string());
+        let strukt = store.load_doc::<StructDoc_>(&ModPath::from("test::MyStruct".to_string())).unwrap();
+        assert_eq!(strukt.docstring, "/// Documentation for MyStruct.\n/// It is nice.".to_string());
+    }
 
-                                                            #[test]
-                                                            fn test_get_doc_module() {
-                                                                let _ = env_logger::init();
-                                                                let store = test_harness(r#"
+    #[test]
+    fn test_get_doc_module() {
+        let _ = env_logger::init();
+        let store = test_harness(r#"
         //! Crate documentation.
         //! A test crate.
 
@@ -718,18 +723,18 @@ fn get_crate_doc_path(crate_info: &CrateInfo) -> Result<PathBuf> {
           //! is a module
         }
         "#).unwrap();
-                                                                store.save().unwrap();
-                                                                let module = store.load_doc::<ModuleDoc_>(&ModPath::from("test".to_string())).unwrap();
-                                                                assert_eq!(module.docstring, "//! Crate documentation.\n//! A test crate.".to_string());
-                                                                let module = store.load_doc::<ModuleDoc_>(&ModPath::from("test::a".to_string())).unwrap();
-                                                                assert_eq!(module.docstring, "//! module a\n//! is a module".to_string());
-                                                            }
+        store.save().unwrap();
+        let module = store.load_doc::<ModuleDoc_>(&ModPath::from("test".to_string())).unwrap();
+        assert_eq!(module.docstring, "//! Crate documentation.\n//! A test crate.".to_string());
+        let module = store.load_doc::<ModuleDoc_>(&ModPath::from("test::a".to_string())).unwrap();
+        assert_eq!(module.docstring, "//! module a\n//! is a module".to_string());
+    }
 
 
-                                                            #[test]
-                                                            fn test_get_doc_use() {
-                                                                let _ = env_logger::init();
-                                                                let store = test_harness(r#"
+    #[test]
+    fn test_get_doc_use() {
+        let _ = env_logger::init();
+        let store = test_harness(r#"
         mod b {
             mod a {
             struct St(i32);
@@ -753,18 +758,18 @@ fn get_crate_doc_path(crate_info: &CrateInfo) -> Result<PathBuf> {
           s.print_val_plus_two();
         }
         "#).unwrap();
-                                                                let functions = store.get_functions(&ModPath::from("test::b::a::St".to_string())).unwrap();
-                                                                let f = &"print_val".to_string();
-                                                                assert!(functions.contains(f));
-                                                                let f = &"print_val_plus_two".to_string();
-                                                                assert!(functions.contains(f));
-                                                            }
+        let functions = store.get_functions(&ModPath::from("test::b::a::St".to_string())).unwrap();
+        let f = &"print_val".to_string();
+        assert!(functions.contains(f));
+        let f = &"print_val_plus_two".to_string();
+        assert!(functions.contains(f));
+    }
 
-                                                            /// github issue #3
-                                                            #[test]
-                                                            fn test_use_super() {
-                                                                let _ = env_logger::init();
-                                                                let store = test_harness(r#"
+    /// github issue #3
+    #[test]
+    fn test_use_super() {
+        let _ = env_logger::init();
+        let store = test_harness(r#"
         pub mod a {
             pub struct MyStruct;
 
@@ -786,16 +791,16 @@ fn get_crate_doc_path(crate_info: &CrateInfo) -> Result<PathBuf> {
 
         }
         "#).unwrap();
-                                                                let functions = store.get_functions(&ModPath::from("test::a::MyStruct".to_string())).unwrap();
-                                                                let f = &"test_a".to_string();
-                                                                assert!(functions.contains(f));
-                                                            }
+        let functions = store.get_functions(&ModPath::from("test::a::MyStruct".to_string())).unwrap();
+        let f = &"test_a".to_string();
+        assert!(functions.contains(f));
+    }
 
-                                                            /// github issue #2
-                                                            #[test]
-                                                            fn test_use_globbed() {
-                                                                let _ = env_logger::init();
-                                                                let store = test_harness(r#"
+    /// github issue #2
+    #[test]
+    fn test_use_globbed() {
+        let _ = env_logger::init();
+        let store = test_harness(r#"
         pub mod a {
             pub struct MyStruct;
         }
@@ -816,8 +821,8 @@ fn get_crate_doc_path(crate_info: &CrateInfo) -> Result<PathBuf> {
             one.test_a();
         }
         "#).unwrap();
-                                                                let functions = store.get_functions(&ModPath::from("test::a::MyStruct".to_string())).unwrap();
-                                                                let f = &"test_a".to_string();
-                                                                assert!(functions.contains(f));
-                                                            }
-                                                        }
+        let functions = store.get_functions(&ModPath::from("test::a::MyStruct".to_string())).unwrap();
+        let f = &"test_a".to_string();
+        assert!(functions.contains(f));
+    }
+}

@@ -347,10 +347,15 @@ impl<T: Documentable + Serialize + Deserialize> Document<T> {
         let encoded_name = paths::encode_doc_filename(&identifier)
             .chain_err(|| "Could not encode doc filename")?;
 
-        let scope = doc_path.parent().unwrap();
-
-        let full_path = store_path.join(scope.to_path())
-            .join(T::get_filename(encoded_name));
+        let full_path = match doc_path.parent() {
+            Some(scope) => {
+                store_path.join(scope.to_path())
+                    .join(T::get_filename(encoded_name))
+            }
+            None => {
+                store_path.join(T::get_filename(encoded_name))
+            }
+        };
 
         info!("Attempting to load doc at {}", &full_path.display());
 
