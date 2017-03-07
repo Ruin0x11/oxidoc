@@ -5,13 +5,11 @@ use document::Documentable;
 
 use std::collections::{HashMap, HashSet};
 use std::path::{PathBuf};
-use std::fs::{self, create_dir_all, File};
-use std::fmt::Display;
+use std::fs::{self, File};
 use std::io::{Read, Write};
 
 use ::errors::*;
 use document::*;
-use paths;
 
 /// Defines an exact location a documentation file can be found.
 #[derive(Debug)]

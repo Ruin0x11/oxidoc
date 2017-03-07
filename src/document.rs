@@ -4,13 +4,11 @@ use std::fs::{File, create_dir_all};
 use std::io::{Read, Write};
 use serde_json;
 use std::fmt::{self, Display};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use syntax::ast;
 use syntax::abi;
-use syntax::codemap::Spanned;
 use syntax::codemap::{Span};
 use syntax::print::pprust;
-use syntax::visit;
 use paths;
 use store::Store;
 
@@ -257,10 +255,23 @@ pub trait Documentable {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Document<T: Documentable> {
+    /// Documentation information specific to the type being documented.
+    /// Functions have ABI, unsafety, etc. while modules can contain references to other documentation.
     pub doc: T,
+
+    /// Information about the crate the documentation resides in.
+    /// Redundant.
     pub crate_info: CrateInfo,
+
+    /// The complete path to this documentation item.
+    /// For example, inside crate "krate", module "module", the path for a function "some_fn" is:
+    /// ModPath::from("krate::module::some_fn");
     pub path: ModPath,
+
+    /// The one-line overview of the documentation. It is the function signature for functions, "mod module" for modules, etc.
     pub signature: String,
+
+    /// Markdown-format documentation string.
     pub docstring: String,
 }
 
@@ -278,15 +289,15 @@ impl<T: Documentable + Serialize + Deserialize> Document<T> {
 "#, self.crate_info, self.doc.get_info(&self.path), self.signature, self.docstring)
     }
 
+    /// Get the output filename for saving this Document to disk, excluding path.
     pub fn get_filename(&self) -> Result<String> {
         let docfile = paths::encode_doc_filename(&self.path.name().unwrap().identifier)
             .chain_err(|| "Could not encode doc filename")?;
 
-        info!("Encoded name as {}", docfile);
-
         Ok(T::get_filename(docfile))
     }
 
+    /// Get the complete path to a documentation file, given the path to the store it resides in.
     fn get_docfile(&self, store_path: &PathBuf) -> Result<PathBuf> {
         println!("Attempting to write docfile under {} for {}", store_path.display(), self.path);
         let parent = self.path.parent();
@@ -331,26 +342,26 @@ impl<T: Documentable + Serialize + Deserialize> Document<T> {
         Ok(outfile)
     }
 
-    /// Attempt to load the documentation at 'scope' from the store.
-    pub fn load_doc(path: PathBuf, full_path: &ModPath) -> Result<Self> {
-        let identifier = full_path.name().unwrap().identifier.clone();
+    /// Attempt to load the documentation for a fully qualified documentation path inside the given store path.
+    pub fn load_doc(store_path: PathBuf, doc_path: &ModPath) -> Result<Self> {
+        let identifier = doc_path.name().unwrap().identifier.clone();
         let encoded_name = paths::encode_doc_filename(&identifier)
             .chain_err(|| "Could not encode doc filename")?;
 
-        let scope = full_path.parent().unwrap();
+        let scope = doc_path.parent().unwrap();
 
-        let doc_path = path.join(scope.to_path())
+        let full_path = store_path.join(scope.to_path())
             .join(T::get_filename(encoded_name));
 
-        info!("Attempting to load doc at {}", &doc_path.display());
-        let mut fp = File::open(&doc_path)
-            .chain_err(|| format!("Couldn't find oxidoc store {}", doc_path.display()))?;
+        info!("Attempting to load doc at {}", &full_path.display());
+        let mut fp = File::open(&full_path)
+            .chain_err(|| format!("Couldn't find oxidoc store {}", full_path.display()))?;
 
         let mut json = String::new();
         fp.read_to_string(&mut json)
-            .chain_err(|| format!("Couldn't read oxidoc store {}", doc_path.display()))?;
+            .chain_err(|| format!("Couldn't read oxidoc store {}", full_path.display()))?;
 
-        info!("Loading {}", doc_path.display());
+        info!("Loading {}", full_path.display());
         let doc: Self = serde_json::from_str(&json)
             .chain_err(|| "Couldn't parse oxidoc store (regen probably needed)")?;
 
@@ -375,7 +386,7 @@ impl Documentable for StructDoc_ {
         path.to_string()
     }
     fn get_filename(name: String) -> String {
-        format!("sdesc-{}.odoc", name)
+        format!("{}/sdesc-{}.odoc", name, name)
     }
 }
 
@@ -421,8 +432,91 @@ impl Documentable for ModuleDoc_ {
         path.to_string()
     }
     fn get_filename(name: String) -> String {
-        format!("mdesc-{}.odoc", name)
+        format!("{}/mdesc-{}.odoc", name, name)
     }
 }
 
 pub type ModuleDoc = Document<ModuleDoc_>;
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    fn test_harness_store() -> Store {
+        Store::new(PathBuf::from("~/.cargo/registry/doc/test-1.0.0")).unwrap()
+    }
+
+    fn test_harness_fn() -> FnDoc {
+        Document{
+            crate_info: CrateInfo { package: Package {
+                name: "Test".to_string(),
+                version: "1.0.0".to_string() }
+            },
+            path: ModPath::from("test::module::some_fn".to_string()),
+            signature: "some_fn() -> ()".to_string(),
+            docstring: "Documentation for the function".to_string(),
+            doc: FnDoc_ {
+                unsafety: Unsafety::Normal,
+                constness: Constness::NotConst,
+                // TODO: Generics
+                visibility: Visibility::Public,
+                abi: Abi::Rust,
+                ty: FnKind::ItemFn,
+            },
+        }
+    }
+
+    fn test_harness_struct() -> StructDoc {
+        Document{
+            crate_info: CrateInfo { package: Package {
+                name: "Test".to_string(),
+                version: "1.0.0".to_string() }
+            },
+            path: ModPath::from("test::module::MyStruct".to_string()),
+            signature: "struct MyStruct { /* fields omitted */ }".to_string(),
+            docstring: "Documentation for the struct".to_string(),
+            doc: StructDoc_ {
+                fn_docs: Vec::new(),
+            },
+        }
+    }
+
+    fn test_harness_module() -> ModuleDoc {
+        Document{
+            crate_info: CrateInfo { package: Package {
+                name: "Test".to_string(),
+                version: "1.0.0".to_string() }
+            },
+            path: ModPath::from("test::module".to_string()),
+            signature: "mod module".to_string(),
+            docstring: "Documentation for the module".to_string(),
+            doc: ModuleDoc_ {
+                fn_docs: Vec::new(),
+                struct_docs: Vec::new(),
+                module_docs: Vec::new(),
+            },
+        }
+    }
+
+    #[test]
+    fn test_get_docfile() {
+        let store = test_harness_store();
+        let fn_doc = test_harness_fn();
+        assert_eq!(
+            fn_doc.get_docfile(&store.path).unwrap(),
+            PathBuf::from(&"~/.cargo/registry/doc/test-1.0.0/test/module/some%x5F;fn.odoc")
+        );
+
+        let struct_doc = test_harness_struct();
+        assert_eq!(
+            struct_doc.get_docfile(&store.path).unwrap(),
+            PathBuf::from(&"~/.cargo/registry/doc/test-1.0.0/test/module/MyStruct/sdesc-MyStruct.odoc")
+        );
+
+        let module_doc = test_harness_module();
+        assert_eq!(
+            module_doc.get_docfile(&store.path).unwrap(),
+            PathBuf::from(&"~/.cargo/registry/doc/test-1.0.0/test/module/mdesc-module.odoc")
+        );
+    }
+}
