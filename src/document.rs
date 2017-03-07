@@ -316,8 +316,6 @@ impl<T: Documentable + Serialize + Deserialize> Document<T> {
             }
         };
 
-        println!("Attempting to write docfile under {} for {}", &doc_path.display(), self.path);
-
         Ok(doc_path)
     }
 

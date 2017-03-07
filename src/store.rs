@@ -33,12 +33,12 @@ type StructName = String;
 pub struct Store {
     pub path: PathBuf,
 
-    /// Locations of documentation in the store
+    // Locations of documentation in the store
     modpaths: HashSet<ModPath>,
     functions: HashMap<ModPath, HashSet<FunctionName>>,
     structs: HashMap<ModPath, HashSet<StructName>>,
 
-    /// Documentation data in memory
+    // Documentation data in memory
     fn_docs: Vec<FnDoc>,
     struct_docs: Vec<StructDoc>,
     module_docs: Vec<ModuleDoc>,
@@ -116,7 +116,6 @@ impl Store {
     }
 
     pub fn add_module(&mut self, module_doc: ModuleDoc) {
-        println!("Add module {:?}", module_doc);
         self.module_docs.push(module_doc);
     }
 
@@ -143,6 +142,7 @@ impl Store {
 
     /// Adds a struct's info to the store in memory.
     pub fn add_struct(&mut self, struct_doc: StructDoc) {
+        info!("Adding struct: {:?}", struct_doc);
         let parent = struct_doc.path.parent().unwrap();
 
         // Add this struct to the set of structs under the struct's module path
