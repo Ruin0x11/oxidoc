@@ -339,8 +339,6 @@ impl<'v> Visitor<'v> for RustdocCacher<'v> {
     fn visit_variant_data(&mut self, var: &'v ast::VariantData, id: ast::Ident,
                           _: &'v ast::Generics, node_id: ast::NodeId, span: Span) {
 
-        let my_path = ModPath::join(&self.current_scope,
-                                    &ModPath::from_ident(span, id));
         let sig = match self.items.iter().last() {
             Some(item) => format!("{} {} {{ /* fields omitted */ }}",
                                   pprust::visibility_qualified(&item.vis, &"struct"),
@@ -357,7 +355,9 @@ impl<'v> Visitor<'v> for RustdocCacher<'v> {
 
         let struct_doc = Document {
             crate_info: self.crate_info.clone(),
-            path: my_path,
+            // The current scope itself contains the struct name as the last segment,
+            // which is the directory where we want the struct documentation to live.
+            path: self.current_scope.clone(),
             signature: sig,
             docstring: doc,
             doc: StructDoc_ {

@@ -299,7 +299,6 @@ impl<T: Documentable + Serialize + Deserialize> Document<T> {
 
     /// Get the complete path to a documentation file, given the path to the store it resides in.
     fn get_docfile(&self, store_path: &PathBuf) -> Result<PathBuf> {
-        println!("Attempting to write docfile under {} for {}", store_path.display(), self.path);
         let parent = self.path.parent();
 
         let name = self.get_filename()
@@ -316,6 +315,8 @@ impl<T: Documentable + Serialize + Deserialize> Document<T> {
                 store_path.join(name)
             }
         };
+
+        println!("Attempting to write docfile under {} for {}", &doc_path.display(), self.path);
 
         Ok(doc_path)
     }
@@ -354,6 +355,7 @@ impl<T: Documentable + Serialize + Deserialize> Document<T> {
             .join(T::get_filename(encoded_name));
 
         info!("Attempting to load doc at {}", &full_path.display());
+
         let mut fp = File::open(&full_path)
             .chain_err(|| format!("Couldn't find oxidoc store {}", full_path.display()))?;
 
