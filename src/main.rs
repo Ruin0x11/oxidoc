@@ -19,6 +19,7 @@ mod driver;
 mod paths;
 mod store;
 mod io_support;
+mod visitor;
 
 use std::path::PathBuf;
 use clap::{App, Arg};

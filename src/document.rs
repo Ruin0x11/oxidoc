@@ -5,7 +5,7 @@ use std::io::{Read, Write};
 use serde_json;
 use std::fmt::{self, Display};
 use std::path::PathBuf;
-use syntax::ast;
+use syntax::ast::{self, Name};
 use syntax::abi;
 use syntax::codemap::{Span};
 use syntax::print::pprust;
@@ -253,6 +253,51 @@ pub trait Documentable {
     fn get_filename(name: String) -> String;
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub enum DocItem {
+    FnItem(FnDoc),
+    StructItem(StructDoc),
+    ModuleItem(ModuleDoc),
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Attributes {
+    pub docstrings: Vec<String>,
+}
+
+impl Attributes {
+    pub fn from_ast(attrs: &[ast::Attribute]) -> Attributes {
+        let mut doc_strings = vec![];
+        let mut sp = None;
+        let other_attrs = attrs.iter().filter_map(|attr| {
+            attr.with_desugared_doc(|attr| {
+                if let Some(value) = attr.value_str() {
+                    if attr.check_name("doc") {
+                        doc_strings.push(value.to_string());
+                        if sp.is_none() {
+                            sp = Some(attr.span);
+                        }
+                        return None;
+                    }
+                }
+
+                Some(attr.clone())
+            })
+        }).collect();
+        Attributes {
+            docstrings: doc_strings,
+            //other_attrs: other_attrs,
+        }
+    }
+
+    /// Finds the `doc` attribute as a NameValue and returns the corresponding
+    /// value found.
+    pub fn doc_value<'a>(&'a self) -> Option<&'a str> {
+        self.docstrings.first().map(|s| &s[..])
+    }
+}
+
+/// Defines a single documentation item that can be drawn.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Document<T: Documentable> {
     /// Documentation information specific to the type being documented.
@@ -271,12 +316,15 @@ pub struct Document<T: Documentable> {
     /// The one-line overview of the documentation. It is the function signature for functions, "mod module" for modules, etc.
     pub signature: String,
 
-    /// Markdown-format documentation string.
-    pub docstring: String,
+    pub attrs: Attributes,
 }
 
 impl<T: Documentable + Serialize + Deserialize> Document<T> {
     fn render(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let doc = match self.attrs.doc_value() {
+            Some(d) => d,
+            None    => "",
+        };
         write!(f, r#"
 (from crate {})
 === {}
@@ -286,7 +334,7 @@ impl<T: Documentable + Serialize + Deserialize> Document<T> {
 ------------------------------------------------------------------------------
 
 {}
-"#, self.crate_info, self.doc.get_info(&self.path), self.signature, self.docstring)
+"#, self.crate_info, self.doc.get_info(&self.path), self.signature, doc)
     }
 
     /// Get the output filename for saving this Document to disk, excluding path.
@@ -382,11 +430,11 @@ impl<T: Documentable + Serialize + Deserialize> Display for Document<T> {
 
 /// All documentation information for a struct.
 #[derive(Debug, Serialize, Deserialize)]
-pub struct StructDoc_ {
+pub struct StructDoc {
     pub fn_docs: Vec<DocSig>,
 }
 
-impl Documentable for StructDoc_ {
+impl Documentable for StructDoc {
     fn get_info(&self, path: &ModPath) -> String {
         path.to_string()
     }
@@ -395,11 +443,9 @@ impl Documentable for StructDoc_ {
     }
 }
 
-pub type StructDoc = Document<StructDoc_>;
-
 /// All documentation information for a function.
 #[derive(Debug, Serialize, Deserialize)]
-pub struct FnDoc_ {
+pub struct FnDoc {
     pub unsafety: Unsafety,
     pub constness: Constness,
     // TODO: Generics
@@ -408,7 +454,7 @@ pub struct FnDoc_ {
     pub ty: FnKind,
 }
 
-impl Documentable for FnDoc_ {
+impl Documentable for FnDoc {
     fn get_info(&self, path: &ModPath) -> String {
         match self.ty {
             FnKind::ItemFn => format!("{}()", path),
@@ -422,17 +468,29 @@ impl Documentable for FnDoc_ {
     }
 }
 
-pub type FnDoc = Document<FnDoc_>;
-
 /// All documentation inormation for a module.
 #[derive(Debug, Serialize, Deserialize)]
-pub struct ModuleDoc_ {
-    pub fn_docs: Vec<DocSig>,
-    pub struct_docs: Vec<DocSig>,
-    pub module_docs: Vec<DocSig>,
+pub struct ModuleDoc {
+    pub name: Option<String>,
+    pub structs: Vec<StructDoc>,
+    pub fns: Vec<FnDoc>,
+    pub mods: Vec<ModuleDoc>,
+    pub is_crate: bool,
 }
 
-impl Documentable for ModuleDoc_ {
+impl ModuleDoc {
+    pub fn new(name: Option<String>) -> ModuleDoc {
+        ModuleDoc {
+            name:     name,
+            structs:  Vec::new(),
+            fns:      Vec::new(),
+            mods:     Vec::new(),
+            is_crate: false,
+        }
+    }
+}
+
+impl Documentable for ModuleDoc {
     fn get_info(&self, path: &ModPath) -> String {
         path.to_string()
     }
@@ -441,87 +499,17 @@ impl Documentable for ModuleDoc_ {
     }
 }
 
-pub type ModuleDoc = Document<ModuleDoc_>;
+/// All documentation inormation for a trait.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TraitDoc {
+    pub unsafety: Unsafety
+}
 
-#[cfg(test)]
-mod test {
-    use super::*;
-
-    fn test_harness_store() -> Store {
-        Store::new(PathBuf::from("~/.cargo/registry/doc/test-1.0.0")).unwrap()
+impl Documentable for TraitDoc {
+    fn get_info(&self, path: &ModPath) -> String {
+        path.to_string()
     }
-
-    fn test_harness_fn() -> FnDoc {
-        Document{
-            crate_info: CrateInfo { package: Package {
-                name: "Test".to_string(),
-                version: "1.0.0".to_string() }
-            },
-            path: ModPath::from("test::module::some_fn".to_string()),
-            signature: "some_fn() -> ()".to_string(),
-            docstring: "Documentation for the function".to_string(),
-            doc: FnDoc_ {
-                unsafety: Unsafety::Normal,
-                constness: Constness::NotConst,
-                // TODO: Generics
-                visibility: Visibility::Public,
-                abi: Abi::Rust,
-                ty: FnKind::ItemFn,
-            },
-        }
-    }
-
-    fn test_harness_struct() -> StructDoc {
-        Document{
-            crate_info: CrateInfo { package: Package {
-                name: "Test".to_string(),
-                version: "1.0.0".to_string() }
-            },
-            path: ModPath::from("test::module::MyStruct".to_string()),
-            signature: "struct MyStruct { /* fields omitted */ }".to_string(),
-            docstring: "Documentation for the struct".to_string(),
-            doc: StructDoc_ {
-                fn_docs: Vec::new(),
-            },
-        }
-    }
-
-    fn test_harness_module() -> ModuleDoc {
-        Document{
-            crate_info: CrateInfo { package: Package {
-                name: "Test".to_string(),
-                version: "1.0.0".to_string() }
-            },
-            path: ModPath::from("test::module".to_string()),
-            signature: "mod module".to_string(),
-            docstring: "Documentation for the module".to_string(),
-            doc: ModuleDoc_ {
-                fn_docs: Vec::new(),
-                struct_docs: Vec::new(),
-                module_docs: Vec::new(),
-            },
-        }
-    }
-
-    #[test]
-    fn test_get_docfile() {
-        let store = test_harness_store();
-        let fn_doc = test_harness_fn();
-        assert_eq!(
-            fn_doc.get_docfile(&store.path).unwrap(),
-            PathBuf::from(&"~/.cargo/registry/doc/test-1.0.0/test/module/some%x5F;fn.odoc")
-        );
-
-        let struct_doc = test_harness_struct();
-        assert_eq!(
-            struct_doc.get_docfile(&store.path).unwrap(),
-            PathBuf::from(&"~/.cargo/registry/doc/test-1.0.0/test/module/MyStruct/sdesc-MyStruct.odoc")
-        );
-
-        let module_doc = test_harness_module();
-        assert_eq!(
-            module_doc.get_docfile(&store.path).unwrap(),
-            PathBuf::from(&"~/.cargo/registry/doc/test-1.0.0/test/module/mdesc-module.odoc")
-        );
+    fn get_filename(name: String) -> String {
+        format!("{}/tdesc-{}.odoc", name, name)
     }
 }

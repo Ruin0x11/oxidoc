@@ -67,15 +67,15 @@ impl Driver {
     /// Takes a module path, determines what kind of documentation it is referring to, and displays it.
     fn display_name(&self, name: &ModPath) -> Result<()> {
         // TODO: Currently looking for everything blindly.
-        if let Ok(x) = self.display_doc::<ModuleDoc_>(name) {
+        if let Ok(x) = self.display_doc::<ModuleDoc>(name) {
             // return Ok(x)
         }
 
-        if let Ok(x) = self.display_doc::<StructDoc_>(name) {
+        if let Ok(x) = self.display_doc::<StructDoc>(name) {
             // return Ok(x)
         }
 
-        if let Ok(x) = self.display_doc::<FnDoc_>(name) {
+        if let Ok(x) = self.display_doc::<FnDoc>(name) {
             // return Ok(x)
         }
 
