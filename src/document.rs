@@ -272,7 +272,7 @@ impl Attributes {
     pub fn from_ast(attrs: &[ast::Attribute]) -> Attributes {
         let mut doc_strings = vec![];
         let mut sp = None;
-        let other_attrs = attrs.iter().filter_map(|attr| {
+        let other_attrs: Vec<ast::Attribute> = attrs.iter().filter_map(|attr| {
             attr.with_desugared_doc(|attr| {
                 if let Some(value) = attr.value_str() {
                     if attr.check_name("doc") {
@@ -513,5 +513,18 @@ impl Documentable for TraitDoc {
     }
     fn get_filename(name: String) -> String {
         format!("{}/tdesc-{}.odoc", name, name)
+    }
+}
+
+pub struct EnumDoc {
+    
+}
+
+impl Documentable for EnumDoc {
+    fn get_info(&self, path: &ModPath) -> String {
+        path.to_string()
+    }
+    fn get_filename(name: String) -> String {
+        format!("{}/edesc-{}.odoc", name, name)
     }
 }

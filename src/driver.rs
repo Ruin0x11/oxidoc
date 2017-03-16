@@ -2,19 +2,22 @@ use serde::ser::{Serialize};
 use serde::de::{Deserialize};
 use paths;
 use store::*;
-use ::errors::*;
 use std::collections::HashMap;
 use std::fmt;
 use std::fmt::Display;
 use document::*;
 
-error_chain! {
-    errors {
-        NoDocumentationFound {
-            description("No documentation could be found.")
+mod errors {
+    error_chain! {
+        errors {
+            NoDocumentationFound {
+                description("No documentation could be found.")
+            }
         }
     }
+    
 }
+use errors::*;
 
 fn expand_name(name: &String) -> Result<ModPath> {
     let segs = ModPath::from(name.clone());
@@ -112,7 +115,7 @@ impl Driver {
             bail!("No modules matched name {}", name);
         }
         Ok(found)
-        
+            
     }
 
     /// Obtains a list of oxidoc stores the given documentation identifier could possibly exist in.
