@@ -164,18 +164,6 @@ fn generate_doc_cache(krate: &ast::Crate, crate_info: CrateInfo) -> Result<Store
 
     visitor.docstrings.push(doc);
 
-    // visitor.store.add_module(Document{
-    //     crate_info: visitor.crate_info.clone(),
-    //     path: visitor.current_scope.clone(),
-    //     signature: format!("crate {}", visitor.crate_info.package.name),
-    //     docstring: doc,
-    //     doc: ModuleDoc {
-    //         fn_docs: Vec::new(),
-    //         struct_docs: Vec::new(),
-    //         module_docs: Vec::new(),
-    //     }
-    // });
-
     // Create a list of 'use'd namespaces for the crate's namespace
     visitor.used_namespaces.push(HashMap::new());
 
@@ -208,22 +196,6 @@ mod test {
     }
 
 
-    #[test]
-    fn test_has_modules() {
-        let _ = env_logger::init();
-        let store = test_harness(r#"
-        mod a {
-            mod b {
-            }
-        }"#).unwrap();
-        let modules = store.get_modpaths();
-        let p = &ModPath::from("test".to_string());
-        assert!(modules.contains(p));
-        let p = &ModPath::from("test::a".to_string());
-        assert!(modules.contains(p));
-        let p = &ModPath::from("test::a::b".to_string());
-        assert!(modules.contains(p));
-    }
 
     #[test]
     fn test_module_has_fns() {

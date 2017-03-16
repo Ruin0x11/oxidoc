@@ -163,6 +163,9 @@ impl Display for PathSegment {
 pub struct ModPath(pub Vec<PathSegment>);
 
 impl ModPath {
+    pub fn new() -> ModPath {
+        ModPath(Vec::new())
+    }
     pub fn from_ident(span: Span, ident: ast::Ident) -> ModPath {
         ModPath(
             ast::Path::from_ident(span, ident).segments.iter().map(
@@ -431,7 +434,6 @@ impl<T: Documentable + Serialize + Deserialize> Display for Document<T> {
 /// All documentation information for a struct.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct StructDoc {
-    pub fn_docs: Vec<DocSig>,
 }
 
 impl Documentable for StructDoc {

@@ -39,9 +39,10 @@ pub struct Store {
     structs: HashMap<ModPath, HashSet<StructName>>,
 
     // Documentation data in memory
-    fn_docs: Vec<FnDoc>,
-    struct_docs: Vec<StructDoc>,
-    module_docs: Vec<ModuleDoc>,
+    fn_docs: Vec<Document<FnDoc>>,
+    struct_docs: Vec<Document<StructDoc>>,
+    module_docs: Vec<Document<ModuleDoc>>,
+    trait_docs: Vec<Document<TraitDoc>>,
 }
 
 impl Store {
@@ -56,6 +57,7 @@ impl Store {
             fn_docs: Vec::new(),
             struct_docs: Vec::new(),
             module_docs: Vec::new(),
+            trait_docs: Vec::new(),
         })
     }
 
@@ -94,7 +96,7 @@ impl Store {
     }
 
     /// Adds a function's info to the store in memory.
-    pub fn add_function(&mut self, fn_doc: FnDoc) {
+    pub fn add_function(&mut self, fn_doc: Document<FnDoc>) {
         let parent = fn_doc.path.parent().unwrap();
         self.add_modpath(parent.clone());
 
@@ -115,8 +117,12 @@ impl Store {
         self.fn_docs.push(fn_doc);
     }
 
-    pub fn add_module(&mut self, module_doc: ModuleDoc) {
+    pub fn add_module(&mut self, module_doc: Document<ModuleDoc>) {
         self.module_docs.push(module_doc);
+    }
+
+    pub fn add_trait(&mut self, trait_doc: Document<TraitDoc>) {
+        self.trait_docs.push(trait_doc);
     }
 
     /// Add a module's path to the list of known modules in this store.
@@ -141,7 +147,7 @@ impl Store {
     }
 
     /// Adds a struct's info to the store in memory.
-    pub fn add_struct(&mut self, struct_doc: StructDoc) {
+    pub fn add_struct(&mut self, struct_doc: Document<StructDoc>) {
         info!("Adding struct: {:?}", struct_doc);
         let parent = struct_doc.path.parent().unwrap();
 
