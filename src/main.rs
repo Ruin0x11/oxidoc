@@ -20,6 +20,7 @@ mod paths;
 mod store;
 mod io_support;
 mod visitor;
+mod convert;
 
 use std::path::PathBuf;
 use clap::{App, Arg};

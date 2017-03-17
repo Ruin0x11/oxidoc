@@ -31,8 +31,8 @@ impl OxidocVisitor {
                       generics: &ast::Generics) -> Enum {
         Enum {
             name: name,
-            variants: def.variants.clone(),
-            attrs: item.attrs.clone(),
+            variants: def.variants.iter().cloned().map(|x| Variant::from(x)).collect(),
+            attrs: Attributes::from_ast(&item.attrs),
         }
     }
 
@@ -54,8 +54,8 @@ impl OxidocVisitor {
             visibility: Visibility::Inherited,
             abi: Abi::from(ast_abi),
             ty: FnKind::ItemFn, //TODO: this should be determined during
-                                // conversion to documentation
-            attrs: item.attrs.clone(),
+            // conversion to documentation
+            attrs: Attributes::from_ast(&item.attrs),
         }
     }
 
@@ -67,7 +67,7 @@ impl OxidocVisitor {
             type_: pprust::to_string(|s| s.print_type(ty)),
             expr:  pprust::to_string(|s| s.print_expr_maybe_paren(expr)),
             name:  name,
-            attrs: item.attrs.clone(),
+            attrs: Attributes::from_ast(&item.attrs),
         }
     }
 
@@ -76,8 +76,8 @@ impl OxidocVisitor {
                     variant_data: &ast::VariantData,
                     generics: &ast::Generics) -> Struct {
         Struct {
-            fields: StructField::from_variant_data(variant_data),
-            attrs: item.attrs.clone(),
+            fields: StructField::from_variant_data(variant_data.fields()),
+            attrs: Attributes::from_ast(&item.attrs),
         }
         
     }
@@ -90,7 +90,7 @@ impl OxidocVisitor {
         Trait {
             name: name,
             unsafety: Unsafety::from(ast_unsafety),
-            attrs: item.attrs.clone(),
+            attrs: Attributes::from_ast(&item.attrs),
         }
     }
 
@@ -100,13 +100,18 @@ impl OxidocVisitor {
                   trait_ref: &Option<ast::TraitRef>,
                   ty: &ast::Ty,
                   items: &Vec<ast::ImplItem>) -> Impl {
+        let trait_ = match *trait_ref {
+            Some(ref tr) => Some(TraitRef::from(tr.clone())),
+            None     => None,
+        };
         Impl {
             unsafety: Unsafety::from(unsafety),
-            generics: generics.clone(),
-            trait_: trait_ref.clone(),
-            for_: ty.clone(),
-            items: items.clone(),
-            attrs: item.attrs.clone(),
+            trait_: trait_,
+            for_: Ty::from(ty.clone()),
+            items: items.iter().map(|x| ImplItem {
+
+            }).collect(),
+            attrs: Attributes::from_ast(&item.attrs),
         }
     }
 
@@ -127,8 +132,8 @@ impl OxidocVisitor {
             },
             ast::ItemKind::Mod(ref m) => {
                 module_doc.mods.push(self.visit_module(item.attrs.clone(),
-                                                              m,
-                                                              Some(name)));
+                                                       m,
+                                                       Some(name)));
             },
             ast::ItemKind::Enum(ref def, ref generics) => {
                 self.visit_enum_def(item, Some(name), def, generics);
@@ -175,8 +180,8 @@ impl OxidocVisitor {
 
     fn visit_crate(&mut self, krate: ast::Crate) -> Module {
         let mut crate_module = self.visit_module(krate.attrs.clone(),
-                                             &krate.module,
-                                             None);
+                                                 &krate.module,
+                                                 None);
         crate_module.is_crate = true;
         crate_module
     }

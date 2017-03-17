@@ -43,7 +43,7 @@ impl Display for DocSig {
 }
 
 // There are redundant enums because we can't derive Serialize/Deserialize on ast's types.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub enum Unsafety {
     Unsafe,
     Normal,
@@ -58,7 +58,7 @@ impl From<ast::Unsafety> for Unsafety {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub enum Constness {
     Const,
     NotConst,
@@ -73,7 +73,7 @@ impl From<ast::Constness> for Constness {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub enum Visibility {
     Public,
     Private,
@@ -90,7 +90,7 @@ impl From<ast::Visibility> for Visibility{
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub enum Abi {
     // Single platform ABIs
     Cdecl,
@@ -136,7 +136,7 @@ impl From<abi::Abi> for Abi {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub enum FnKind {
     ItemFn,
     Method,
@@ -264,12 +264,18 @@ pub enum DocItem {
     ModuleItem(Module),
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub struct Attributes {
     pub docstrings: Vec<String>,
 }
 
 impl Attributes {
+    pub fn new() -> Attributes {
+        Attributes {
+            docstrings: Vec::new(),
+        }
+    }
+
     pub fn from_ast(attrs: &[ast::Attribute]) -> Attributes {
         let mut doc_strings = vec![];
         let mut sp = None;
@@ -432,7 +438,7 @@ impl<T: Documentable + Serialize + Deserialize> Display for Document<T> {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub struct StructField {
     type_: String,
     name: Option<String>,
@@ -452,18 +458,18 @@ impl From<ast::StructField> for StructField {
 }
 
 impl StructField {
-    pub fn from_variant_data(variant_data: &ast::VariantData) -> Vec<StructField> {
-        variant_data.fields().iter().cloned().map(|vd| StructField::from(vd)).collect()
+    pub fn from_variant_data(fields: &[ast::StructField]) -> Vec<StructField> {
+        fields.iter().cloned().map(|vd| StructField::from(vd)).collect()
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub struct Struct {
     pub fields: Vec<StructField>,
-    pub attrs: Vec<ast::Attribute>,
+    pub attrs: Attributes,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub struct Function {
     pub name: Option<String>,
     pub unsafety: Unsafety,
@@ -472,23 +478,24 @@ pub struct Function {
     pub visibility: Visibility,
     pub abi: Abi,
     pub ty: FnKind,
-    pub attrs: Vec<ast::Attribute>,
+    pub attrs: Attributes,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub struct Module {
     pub name: Option<String>,
     pub structs: Vec<Struct>,
     pub fns: Vec<Function>,
     pub mods: Vec<Module>,
     pub is_crate: bool,
-    pub attrs: Vec<ast::Attribute>,
+    pub attrs: Attributes,
 }
 
 impl Module {
     pub fn new(name: Option<String>) -> Module {
         Module {
             name:     name,
+            attrs:    Attributes::new(),
             structs:  Vec::new(),
             fns:      Vec::new(),
             mods:     Vec::new(),
@@ -497,39 +504,109 @@ impl Module {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub struct Trait {
     pub unsafety: Unsafety,
     pub name: String,
-    pub attrs: Vec<ast::Attribute>,
+    pub attrs: Attributes,
 }
 
+#[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub struct Enum {
-    pub variants: Vec<ast::Variant>,
-    pub attrs: Vec<ast::Attribute>,
+    pub variants: Vec<Variant>,
+    pub attrs: Attributes,
     pub name: Option<String>,
 }
 
+#[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub struct Variant {
     pub name: String,
-    pub attrs: Vec<ast::Attribute>,
-    pub data: ast::VariantData,
+    pub attrs: Attributes,
+    pub data: VariantData,
 }
 
+impl From<ast::Variant> for Variant {
+       fn from(variant: ast::Variant) -> Variant {
+           Variant {
+               name: pprust::ident_to_string(variant.node.name),
+               attrs: Attributes::from_ast(&variant.node.attrs),
+               data: VariantData::from(variant.node.data),
+           }
+       }
+}
+
+#[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
+pub enum VariantData {
+    Struct(Vec<StructField>),
+    Tuple(Vec<StructField>),
+    Unit,
+}
+
+impl From<ast::VariantData> for VariantData {
+       fn from(variant: ast::VariantData) -> VariantData {
+           match variant {
+               ast::VariantData::Struct(fields, _) => {
+                   let my_fields = StructField::from_variant_data(&fields);
+                   VariantData::Struct(my_fields)
+               }
+               ast::VariantData::Tuple(fields, _) => {
+                   let my_fields = StructField::from_variant_data(&fields);
+                   VariantData::Tuple(my_fields)
+               }
+               ast::VariantData::Unit(_) => {
+                   VariantData::Unit
+               }
+           }
+       }
+}
+
+#[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub struct Constant {
     pub type_: String,
     pub expr: String,
     pub name: String,
-    pub attrs: Vec<ast::Attribute>,
+    pub attrs: Attributes,
 }
 
+#[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub struct Impl {
     pub unsafety: Unsafety,
-    pub generics: ast::Generics,
-    pub trait_: Option<ast::TraitRef>,
-    pub for_: ast::Ty,
-    pub items: Vec<ast::ImplItem>,
-    pub attrs: Vec<ast::Attribute>,
+    //pub generics: ast::Generics,
+    pub trait_: Option<TraitRef>,
+    pub for_: Ty,
+    pub items: Vec<ImplItem>,
+    pub attrs: Attributes,
+}
+
+#[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
+pub struct TraitRef {
+    pub path: ModPath,
+}
+
+impl From<ast::TraitRef> for TraitRef {
+       fn from(trait_ref: ast::TraitRef) -> TraitRef {
+           TraitRef {
+               path: ModPath::from(trait_ref.path)
+           }
+       }
+}
+
+#[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
+pub struct ImplItem {
+    
+}
+
+#[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
+pub struct Ty {
+    ty: String,
+}
+
+impl From<ast::Ty> for Ty {
+    fn from(ty: ast::Ty) -> Ty {
+        Ty {
+            ty: pprust::to_string(|s| s.print_type(&ty)),
+        }
+    }
 }
 
 // -----
@@ -562,7 +639,7 @@ pub struct Impl {
 
 // TODO: Testing a new design.
 struct NewDocTemp_ {
-    signature: String,
+    name: String,
     docstring: Option<String>,
     mod_path: ModPath,
     inner_data: DocType,
@@ -572,6 +649,11 @@ struct NewDocTemp_ {
 }
 
 impl NewDocTemp_ {
+    fn get_doc_filename(&self) -> String {
+        let prefix = self.inner_data.get_doc_file_prefix();
+        format!("{}{}.odoc", prefix, self.name)
+    }
+
     fn render(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, r#"
 (crate info)
@@ -584,7 +666,7 @@ impl NewDocTemp_ {
 {}
 
 {}
-"#, self.signature, self.docstring, "(references here)")
+"#, self.name, "(docstring)", "(references)")
     }
 }
 
@@ -605,4 +687,18 @@ enum DocType {
     // Union,
     //TypedefDoc,
     TraitDoc(Trait),
+}
+
+impl DocType {
+    fn get_doc_file_prefix(&self) -> String {
+        match *self {
+            DocType::ModuleDoc(..) => "mdesc-",
+            DocType::EnumDoc(..)   => "edesc-",
+            DocType::StructDoc(..) => "sdesc-",
+            DocType::ConstDoc(..)  => "cdesc-",
+            DocType::TraitDoc(..)  => "tdesc-",
+            DocType::FnDoc(..) |
+            _             => "",
+        }.to_string()
+    }
 }

@@ -31,6 +31,7 @@ type StructName = String;
 /// A set of Rustdoc documentation for a single crate.
 #[derive(Debug)]
 pub struct Store {
+    pub name: String,
     pub path: PathBuf,
 
     // Locations of documentation in the store
