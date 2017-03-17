@@ -33,7 +33,7 @@ This provides:
 (from crate oxidoc-0.1.0)
 === oxidoc::store::get_fn_file()
 ------------------------------------------------------------------------------
-  fn get_fn_file(path: &PathBuf, fn_doc: &FnDoc) -> PathBuf
+  fn get_fn_file(path: &PathBuf, fn_doc: &Function) -> PathBuf
 
 ------------------------------------------------------------------------------
 

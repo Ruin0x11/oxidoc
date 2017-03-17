@@ -26,35 +26,98 @@ impl OxidocVisitor {
     }
 
     fn visit_enum_def(&mut self, item: &ast::Item,
-                      name: Option<String>, def: &ast::EnumDef,
-                      generics: &ast::Generics) -> EnumDoc {
-        EnumDoc { }
+                      name: Option<String>,
+                      def: &ast::EnumDef,
+                      generics: &ast::Generics) -> Enum {
+        Enum {
+            name: name,
+            variants: def.variants.clone(),
+            attrs: item.attrs.clone(),
+        }
     }
 
     fn visit_fn(&mut self, item: &ast::Item,
-                name: Option<String>,
+                name_symbol: Option<String>,
                 fn_decl: &ast::FnDecl,
                 ast_unsafety: ast::Unsafety,
                 ast_constness: ast::Constness,
                 ast_abi: abi::Abi,
-                generics: &ast::Generics) -> FnDoc {
-        FnDoc {
+                generics: &ast::Generics) -> Function {
+        let name = match name_symbol {
+            Some(symbol) => Some((*symbol.as_str()).to_string()),
+            None         => None
+        };
+        Function {
+            name: name,
             unsafety: Unsafety::from(ast_unsafety),
             constness: Constness::from(ast_constness),
             visibility: Visibility::Inherited,
             abi: Abi::from(ast_abi),
-            ty: FnKind::ItemFn, //TODO: fix
+            ty: FnKind::ItemFn, //TODO: this should be determined during
+                                // conversion to documentation
+            attrs: item.attrs.clone(),
         }
     }
 
-    fn visit_item(&mut self, item: &ast::Item, module_doc: &mut ModuleDoc) {
+    fn visit_const(&self, item: &ast::Item,
+                   ty: &ast::Ty,
+                   expr: &ast::Expr,
+                   name: String) -> Constant {
+        Constant {
+            type_: pprust::to_string(|s| s.print_type(ty)),
+            expr:  pprust::to_string(|s| s.print_expr_maybe_paren(expr)),
+            name:  name,
+            attrs: item.attrs.clone(),
+        }
+    }
+
+    fn visit_struct(&self, item: &ast::Item,
+                    name: String,
+                    variant_data: &ast::VariantData,
+                    generics: &ast::Generics) -> Struct {
+        Struct {
+            fields: StructField::from_variant_data(variant_data),
+            attrs: item.attrs.clone(),
+        }
+        
+    }
+
+    fn visit_trait(&self, item: &ast::Item,
+                   name: String,
+                   ast_unsafety: ast::Unsafety,
+                   ast_generics: &ast::Generics,
+                   trait_items: &Vec<ast::TraitItem>) -> Trait {
+        Trait {
+            name: name,
+            unsafety: Unsafety::from(ast_unsafety),
+            attrs: item.attrs.clone(),
+        }
+    }
+
+    fn visit_impl(&self, item: &ast::Item,
+                  unsafety: ast::Unsafety,
+                  generics: &ast::Generics,
+                  trait_ref: &Option<ast::TraitRef>,
+                  ty: &ast::Ty,
+                  items: &Vec<ast::ImplItem>) -> Impl {
+        Impl {
+            unsafety: Unsafety::from(unsafety),
+            generics: generics.clone(),
+            trait_: trait_ref.clone(),
+            for_: ty.clone(),
+            items: items.clone(),
+            attrs: item.attrs.clone(),
+        }
+    }
+
+    fn visit_item(&mut self, item: &ast::Item, module_doc: &mut Module) {
         let name = pprust::ident_to_string(item.ident);
         match item.node {
             ast::ItemKind::Use(ref view_path) => {
                 
             },
             ast::ItemKind::Const(ref ty, ref expr) => {
-                
+                self.visit_const(item, ty, expr, name);
             }
             ast::ItemKind::Fn(ref decl, unsafety, constness,
                               abi, ref generics, _) => {
@@ -71,21 +134,21 @@ impl OxidocVisitor {
                 self.visit_enum_def(item, Some(name), def, generics);
             },
             ast::ItemKind::Struct(ref variant_data, ref generics) => {
-                
+                self.visit_struct(item, name, variant_data, generics);
             },
             ast::ItemKind::Union(ref variant_data, ref generics) => {
-                
+                // TODO when unions become stable?
             },
             ast::ItemKind::Trait(unsafety, ref generics,
-                                 ref param_bounds, ref items) => {
-                
+                                 ref param_bounds, ref trait_items) => {
+                self.visit_trait(item, name, unsafety, generics, trait_items);
             },
             ast::ItemKind::DefaultImpl(unsafety, ref trait_ref) => {
                 
             },
             ast::ItemKind::Impl(unsafety, polarity, ref generics, ref trait_ref,
                                 ref ty, ref items) => {
-                
+                self.visit_impl(item, unsafety, generics, trait_ref, ty, items);
             },
             ast::ItemKind::Ty(ref ty, ref generics) => {
                 
@@ -93,13 +156,15 @@ impl OxidocVisitor {
             ast::ItemKind::Static(ref ty, mutability, ref expr) => {
                 
             },
-            _ => (),
+            ast::ItemKind::Mac(..) |
+            ast::ItemKind::ExternCrate(..) |
+            ast::ItemKind::ForeignMod(..) => (),
         }
     }
 
     fn visit_module(&mut self, attrs: Vec<ast::Attribute>, module: &ast::Mod,
-                    mod_name: Option<String>) -> ModuleDoc {
-        let mut module_doc = ModuleDoc::new(mod_name);
+                    mod_name: Option<String>) -> Module {
+        let mut module_doc = Module::new(mod_name);
 
         for item in &module.items {
             self.visit_item(item, &mut module_doc);
@@ -108,7 +173,7 @@ impl OxidocVisitor {
         module_doc
     }
 
-    fn visit_crate(&mut self, krate: ast::Crate) -> ModuleDoc {
+    fn visit_crate(&mut self, krate: ast::Crate) -> Module {
         let mut crate_module = self.visit_module(krate.attrs.clone(),
                                              &krate.module,
                                              None);
@@ -132,7 +197,7 @@ mod tests {
         }
     }
     
-    fn test_harness(source_code: &str) -> Result<ModuleDoc> {
+    fn test_harness(source_code: &str) -> Result<Module> {
         let parse_session = ParseSess::new();
         let krate = parse_crate_from_source(source_code, parse_session)?;
 

@@ -37,12 +37,6 @@ pub struct Store {
     modpaths: HashSet<ModPath>,
     functions: HashMap<ModPath, HashSet<FunctionName>>,
     structs: HashMap<ModPath, HashSet<StructName>>,
-
-    // Documentation data in memory
-    fn_docs: Vec<Document<FnDoc>>,
-    struct_docs: Vec<Document<StructDoc>>,
-    module_docs: Vec<Document<ModuleDoc>>,
-    trait_docs: Vec<Document<TraitDoc>>,
 }
 
 impl Store {
@@ -53,11 +47,6 @@ impl Store {
             modpaths: HashSet::new(),
             functions: HashMap::new(),
             structs: HashMap::new(),
-
-            fn_docs: Vec::new(),
-            struct_docs: Vec::new(),
-            module_docs: Vec::new(),
-            trait_docs: Vec::new(),
         })
     }
 
@@ -94,37 +83,6 @@ impl Store {
 
         Ok(())
     }
-
-    /// Adds a function's info to the store in memory.
-    pub fn add_function(&mut self, fn_doc: Document<FnDoc>) {
-        let parent = fn_doc.path.parent().unwrap();
-        self.add_modpath(parent.clone());
-
-        if let Some(list) = self.functions.get_mut(&parent) {
-            let identifier = fn_doc.path.name().unwrap().identifier.clone();
-            list.insert(identifier);
-        }
-        if let None = self.functions.get(&parent) {
-            let identifier = fn_doc.path.name().unwrap().identifier.clone();
-            let mut s = HashSet::new();
-            s.insert(identifier);
-            self.functions.insert(parent, s);
-        }
-
-        info!("Module {} contains fn {}", fn_doc.path.parent().unwrap().to_string(),
-                 fn_doc.path.name().unwrap().identifier);
-
-        self.fn_docs.push(fn_doc);
-    }
-
-    pub fn add_module(&mut self, module_doc: Document<ModuleDoc>) {
-        self.module_docs.push(module_doc);
-    }
-
-    pub fn add_trait(&mut self, trait_doc: Document<TraitDoc>) {
-        self.trait_docs.push(trait_doc);
-    }
-
     /// Add a module's path to the list of known modules in this store.
     pub fn add_modpath(&mut self, scope: ModPath) {
         self.modpaths.insert(scope);
@@ -145,30 +103,6 @@ impl Store {
             Err(e) => Err(e)
         }
     }
-
-    /// Adds a struct's info to the store in memory.
-    pub fn add_struct(&mut self, struct_doc: Document<StructDoc>) {
-        info!("Adding struct: {:?}", struct_doc);
-        let parent = struct_doc.path.parent().unwrap();
-
-        // Add this struct to the set of structs under the struct's module path
-        if let Some(list) = self.structs.get_mut(&parent) {
-            let identifier = struct_doc.path.name().unwrap().identifier.clone();
-            list.insert(identifier);
-        }
-        if let None = self.structs.get(&parent) {
-            let identifier = struct_doc.path.name().unwrap().identifier.clone();
-            let mut s = HashSet::new();
-            s.insert(identifier);
-            self.structs.insert(parent, s);
-        }
-
-        info!("Module {} contains struct {}", struct_doc.path.parent().unwrap().to_string(),
-                 struct_doc.path.name().unwrap().identifier);
-
-        self.struct_docs.push(struct_doc);
-    }
-
     /// Saves all documentation data that is in-memory to disk.
     pub fn save(&self) -> Result<()> {
         fs::create_dir_all(&self.path)
@@ -177,20 +111,7 @@ impl Store {
         self.save_cache()
             .chain_err(|| format!("Unable to save cache for directory {}", &self.path.display()))?;
 
-        for module_doc in &self.module_docs {
-            module_doc.save_doc(&self.path)
-                .chain_err(|| format!("Could not save module doc {}", &module_doc.path.name().unwrap()))?;
-        }
-
-        for struct_doc in &self.struct_docs {
-            struct_doc.save_doc(&self.path)
-                .chain_err(|| format!("Could not save struct doc {}", &struct_doc.path.name().unwrap()))?;
-        }
-
-        for fn_doc in &self.fn_docs {
-            fn_doc.save_doc(&self.path)
-                .chain_err(|| format!("Could not save function doc {}", &fn_doc.path.name().unwrap()))?;
-        }
+        // TODO: save the rest of documentation
 
         Ok(())
     }

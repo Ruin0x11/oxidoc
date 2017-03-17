@@ -2,6 +2,7 @@ use serde::ser::{Serialize};
 use serde::de::{Deserialize};
 use std::fs::{File, create_dir_all};
 use std::io::{Read, Write};
+use std::collections::HashMap;
 use serde_json;
 use std::fmt::{self, Display};
 use std::path::PathBuf;
@@ -258,9 +259,9 @@ pub trait Documentable {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum DocItem {
-    FnItem(FnDoc),
-    StructItem(StructDoc),
-    ModuleItem(ModuleDoc),
+    FnItem(Function),
+    StructItem(Struct),
+    ModuleItem(Module),
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -431,58 +432,62 @@ impl<T: Documentable + Serialize + Deserialize> Display for Document<T> {
     }
 }
 
-/// All documentation information for a struct.
 #[derive(Debug, Serialize, Deserialize)]
-pub struct StructDoc {
+pub struct StructField {
+    type_: String,
+    name: Option<String>,
 }
 
-impl Documentable for StructDoc {
-    fn get_info(&self, path: &ModPath) -> String {
-        path.to_string()
-    }
-    fn get_filename(name: String) -> String {
-        format!("{}/sdesc-{}.odoc", name, name)
+impl From<ast::StructField> for StructField {
+    fn from(field: ast::StructField) -> StructField {
+        let name = match field.ident {
+            Some(ident) => Some(pprust::ident_to_string(ident)),
+            None       => None,
+        };
+        StructField {
+            type_: pprust::to_string(|s| s.print_type(&field.ty)),
+            name: name,
+        }
     }
 }
 
-/// All documentation information for a function.
+impl StructField {
+    pub fn from_variant_data(variant_data: &ast::VariantData) -> Vec<StructField> {
+        variant_data.fields().iter().cloned().map(|vd| StructField::from(vd)).collect()
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
-pub struct FnDoc {
+pub struct Struct {
+    pub fields: Vec<StructField>,
+    pub attrs: Vec<ast::Attribute>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Function {
+    pub name: Option<String>,
     pub unsafety: Unsafety,
     pub constness: Constness,
     // TODO: Generics
     pub visibility: Visibility,
     pub abi: Abi,
     pub ty: FnKind,
+    pub attrs: Vec<ast::Attribute>,
 }
 
-impl Documentable for FnDoc {
-    fn get_info(&self, path: &ModPath) -> String {
-        match self.ty {
-            FnKind::ItemFn => format!("{}()", path),
-            FnKind::Method => format!("(impl on {})", path.parent().unwrap()),
-            FnKind::MethodFromImpl => format!("(impl on {})", path.parent().unwrap()),
-            FnKind::MethodFromTrait => format!("<from trait>"),
-        }
-    }
-    fn get_filename(name: String) -> String {
-        format!("{}.odoc", name)
-    }
-}
-
-/// All documentation inormation for a module.
 #[derive(Debug, Serialize, Deserialize)]
-pub struct ModuleDoc {
+pub struct Module {
     pub name: Option<String>,
-    pub structs: Vec<StructDoc>,
-    pub fns: Vec<FnDoc>,
-    pub mods: Vec<ModuleDoc>,
+    pub structs: Vec<Struct>,
+    pub fns: Vec<Function>,
+    pub mods: Vec<Module>,
     pub is_crate: bool,
+    pub attrs: Vec<ast::Attribute>,
 }
 
-impl ModuleDoc {
-    pub fn new(name: Option<String>) -> ModuleDoc {
-        ModuleDoc {
+impl Module {
+    pub fn new(name: Option<String>) -> Module {
+        Module {
             name:     name,
             structs:  Vec::new(),
             fns:      Vec::new(),
@@ -492,39 +497,112 @@ impl ModuleDoc {
     }
 }
 
-impl Documentable for ModuleDoc {
-    fn get_info(&self, path: &ModPath) -> String {
-        path.to_string()
-    }
-    fn get_filename(name: String) -> String {
-        format!("{}/mdesc-{}.odoc", name, name)
-    }
-}
-
-/// All documentation inormation for a trait.
 #[derive(Debug, Serialize, Deserialize)]
-pub struct TraitDoc {
-    pub unsafety: Unsafety
+pub struct Trait {
+    pub unsafety: Unsafety,
+    pub name: String,
+    pub attrs: Vec<ast::Attribute>,
 }
 
-impl Documentable for TraitDoc {
-    fn get_info(&self, path: &ModPath) -> String {
-        path.to_string()
-    }
-    fn get_filename(name: String) -> String {
-        format!("{}/tdesc-{}.odoc", name, name)
+pub struct Enum {
+    pub variants: Vec<ast::Variant>,
+    pub attrs: Vec<ast::Attribute>,
+    pub name: Option<String>,
+}
+
+pub struct Variant {
+    pub name: String,
+    pub attrs: Vec<ast::Attribute>,
+    pub data: ast::VariantData,
+}
+
+pub struct Constant {
+    pub type_: String,
+    pub expr: String,
+    pub name: String,
+    pub attrs: Vec<ast::Attribute>,
+}
+
+pub struct Impl {
+    pub unsafety: Unsafety,
+    pub generics: ast::Generics,
+    pub trait_: Option<ast::TraitRef>,
+    pub for_: ast::Ty,
+    pub items: Vec<ast::ImplItem>,
+    pub attrs: Vec<ast::Attribute>,
+}
+
+// -----
+// mod crate::the_mod
+// -----
+// A useful module.
+//
+// == Functions:
+// function_a(), function_b(), function_c()
+//
+// == Statics:
+// STATIC_A, STATIC_B
+//
+// == Enums:
+// CoolEnum, NiceEnum
+
+
+
+// == (impl on crate::MyStruct)
+// -----
+// struct name_of_struct { /* fields omitted */ }
+// -----
+// Does a thing.
+//
+// == Functions:
+// function_a(), function_b(), function_c()
+//
+// ==== from trait crate::NiceTrait:
+// cool(), sweet(), okay()
+
+// TODO: Testing a new design.
+struct NewDocTemp_ {
+    signature: String,
+    docstring: Option<String>,
+    mod_path: ModPath,
+    inner_data: DocType,
+    // source code reference
+    // References to other documents
+    links: HashMap<DocType, Vec<DocLink>>,
+}
+
+impl NewDocTemp_ {
+    fn render(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, r#"
+(crate info)
+=== doc info
+------------------------------------------------------------------------------
+  {}
+
+------------------------------------------------------------------------------
+
+{}
+
+{}
+"#, self.signature, self.docstring, "(references here)")
     }
 }
 
-pub struct EnumDoc {
-    
+struct DocLink {
+    name: String,
+    link_path: ModPath,
 }
 
-impl Documentable for EnumDoc {
-    fn get_info(&self, path: &ModPath) -> String {
-        path.to_string()
-    }
-    fn get_filename(name: String) -> String {
-        format!("{}/edesc-{}.odoc", name, name)
-    }
+/// Describes all possible types of documentation.
+#[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
+enum DocType {
+    FnDoc(Function),
+    ModuleDoc(Module),
+    EnumDoc(Enum),
+    StructDoc(Struct),
+    ConstDoc(Constant),
+    //StaticDoc,
+    // Union,
+    //TypedefDoc,
+    TraitDoc(Trait),
 }
