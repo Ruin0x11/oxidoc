@@ -465,6 +465,7 @@ impl StructField {
 
 #[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub struct Struct {
+    pub name: String,
     pub fields: Vec<StructField>,
     pub attrs: Attributes,
 }
@@ -487,6 +488,11 @@ pub struct Module {
     pub structs: Vec<Struct>,
     pub fns: Vec<Function>,
     pub mods: Vec<Module>,
+    pub consts: Vec<Constant>,
+    pub enums: Vec<Enum>,
+    pub impls: Vec<Impl>,
+    pub traits: Vec<Trait>,
+    pub def_traits: Vec<DefaultImpl>,
     pub is_crate: bool,
     pub attrs: Attributes,
 }
@@ -494,12 +500,17 @@ pub struct Module {
 impl Module {
     pub fn new(name: Option<String>) -> Module {
         Module {
-            name:     name,
-            attrs:    Attributes::new(),
-            structs:  Vec::new(),
-            fns:      Vec::new(),
-            mods:     Vec::new(),
-            is_crate: false,
+            name:       name,
+            attrs:      Attributes::new(),
+            structs:    Vec::new(),
+            fns:        Vec::new(),
+            mods:       Vec::new(),
+            consts:     Vec::new(),
+            enums:      Vec::new(),
+            impls:      Vec::new(),
+            traits:     Vec::new(),
+            def_traits: Vec::new(),
+            is_crate:   false,
         }
     }
 }
@@ -575,6 +586,13 @@ pub struct Impl {
     pub trait_: Option<TraitRef>,
     pub for_: Ty,
     pub items: Vec<ImplItem>,
+    pub attrs: Attributes,
+}
+
+#[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
+pub struct DefaultImpl {
+    pub unsafety: Unsafety,
+    pub trait_: TraitRef,
     pub attrs: Attributes,
 }
 

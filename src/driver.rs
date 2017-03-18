@@ -34,7 +34,7 @@ impl Driver {
         let mut stores = Vec::new();
         for path in paths::doc_iter(true, true).unwrap() {
             info!("Found store at {}", &path.display());
-            let mut store = Store::new(path).unwrap();
+            let mut store = Store::new(path);
             store.load_cache()
                 .chain_err(|| "Failed to load store cache")?;
             stores.push(store);

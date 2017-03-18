@@ -41,14 +41,14 @@ pub struct Store {
 }
 
 impl Store {
-    pub fn new(path: PathBuf) -> Result<Store> {
-
-        Ok(Store {
+    pub fn new(path: PathBuf) -> Store {
+        Store {
+            name: "".to_string(),
             path: path,
             modpaths: HashSet::new(),
             functions: HashMap::new(),
             structs: HashMap::new(),
-        })
+        }
     }
 
     pub fn get_functions(&self, scope: &ModPath) -> Option<&HashSet<FunctionName>> {

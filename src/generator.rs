@@ -22,6 +22,8 @@ use syntax::symbol::{Symbol};
 
 use paths;
 use document::*;
+use convert::{Convert, Context};
+use visitor::OxidocVisitor;
 
 use ::errors::*;
 
@@ -99,7 +101,7 @@ fn cache_doc_for_crate(crate_path: &PathBuf) -> Result<()> {
     }
     let krate = parse(main_path.as_path(), &parse_session).unwrap();
 
-    let store = generate_doc_cache(&krate, info)
+    let store = generate_doc_cache(krate, info)
         .chain_err(|| "Failed to generate doc cache")?;
 
     // TODO: save all to disk once, not as we go
@@ -122,6 +124,19 @@ fn get_crate_doc_path(crate_info: &CrateInfo) -> Result<PathBuf> {
 }
 
 /// Generates documentation for the given crate.
-fn generate_doc_cache(krate: &ast::Crate, crate_info: CrateInfo) -> Result<Store> {
-    bail!("rewriting visitor currently")
+fn generate_doc_cache(krate: ast::Crate, crate_info: CrateInfo) -> Result<Store> {
+    let crate_doc_path = get_crate_doc_path(&crate_info)
+        .chain_err(|| format!("Unable to get crate doc path for crate: {}", &crate_info.package.name))?;
+
+    let context = Context {
+        store_path: crate_doc_path,
+    };
+
+    let store = {
+        let mut v = OxidocVisitor::new(&context);
+        v.visit_crate(krate);
+        v.convert(&context)
+    };
+
+    Ok(store)
 }
