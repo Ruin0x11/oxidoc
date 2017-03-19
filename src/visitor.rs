@@ -20,47 +20,51 @@ use convert::Context;
 pub struct OxidocVisitor<'a> {
     pub current_scope: ModPath,
     pub ctxt: &'a Context,
+    pub crate_module: Module,
 }
 
 impl<'a> OxidocVisitor<'a> {
     pub fn new(ctxt: &'a Context) -> OxidocVisitor<'a> {
         OxidocVisitor {
+            crate_module: Module::new(None),
             current_scope: ModPath::new(),
             ctxt: ctxt,
         }
     }
 
+    fn make_modpath(&self, name: String) -> ModPath {
+        let path = self.current_scope.clone();
+        path.push_string(name);
+        path
+    }
+
     fn visit_enum_def(&mut self, item: &ast::Item,
-                      name: Option<String>,
+                      name: String,
                       enum_def: &ast::EnumDef,
                       generics: &ast::Generics) -> Enum {
         Enum {
             name: name,
             variants: enum_def.variants.iter().cloned().map(|x| Variant::from(x)).collect(),
             attrs: Attributes::from_ast(&item.attrs),
+            path: self.make_modpath(name),
         }
     }
 
     fn visit_fn(&mut self, item: &ast::Item,
-                name_symbol: Option<String>,
+                name: String,
                 fn_decl: &ast::FnDecl,
                 ast_unsafety: ast::Unsafety,
                 ast_constness: ast::Constness,
                 ast_abi: abi::Abi,
                 generics: &ast::Generics) -> Function {
-        let name = match name_symbol {
-            Some(symbol) => Some((*symbol.as_str()).to_string()),
-            None         => None
-        };
         Function {
             name: name,
             unsafety: Unsafety::from(ast_unsafety),
             constness: Constness::from(ast_constness),
             visibility: Visibility::Inherited,
             abi: Abi::from(ast_abi),
-            ty: FnKind::ItemFn, //TODO: this should be determined during
-            // conversion to documentation
             attrs: Attributes::from_ast(&item.attrs),
+            path: self.make_modpath(name),
         }
     }
 
@@ -73,17 +77,19 @@ impl<'a> OxidocVisitor<'a> {
             expr:  pprust::to_string(|s| s.print_expr_maybe_paren(ast_expr)),
             name:  name,
             attrs: Attributes::from_ast(&item.attrs),
+            path: self.make_modpath(name),
         }
     }
 
     fn visit_struct(&self, item: &ast::Item,
                     name: String,
                     variant_data: &ast::VariantData,
-                    generics: &ast::Generics) -> Struct {
+                    ast_generics: &ast::Generics) -> Struct {
         Struct {
             name: name,
             fields: StructField::from_variant_data(variant_data.fields()),
             attrs: Attributes::from_ast(&item.attrs),
+            path: self.make_modpath(name),
         }
         
     }
@@ -97,6 +103,7 @@ impl<'a> OxidocVisitor<'a> {
             name: name,
             unsafety: Unsafety::from(ast_unsafety),
             attrs: Attributes::from_ast(&item.attrs),
+            path: self.make_modpath(name),
         }
     }
 
@@ -143,18 +150,18 @@ impl<'a> OxidocVisitor<'a> {
             }
             ast::ItemKind::Fn(ref decl, unsafety, constness,
                               abi, ref generics, _) => {
-                let f = self.visit_fn(item, Some(name), &*decl,
+                let f = self.visit_fn(item, name, &*decl,
                                       unsafety, constness.node,
                                       abi, generics);
                 module.fns.push(f);
             },
             ast::ItemKind::Mod(ref m) => {
                 let m = self.visit_module(item.attrs.clone(),
-                                         m, Some(name));
+                                          m, Some(name));
                 module.mods.push(m);
             },
             ast::ItemKind::Enum(ref def, ref generics) => {
-                let e = self.visit_enum_def(item, Some(name),
+                let e = self.visit_enum_def(item, name,
                                             def, generics);
                 module.enums.push(e);
             },
@@ -212,12 +219,11 @@ impl<'a> OxidocVisitor<'a> {
         module
     }
 
-    pub fn visit_crate(&mut self, krate: ast::Crate) -> Module {
-        let mut crate_module = self.visit_module(krate.attrs.clone(),
-                                                 &krate.module,
-                                                 None);
-        crate_module.is_crate = true;
-        crate_module
+    pub fn visit_crate(&mut self, krate: ast::Crate) {
+        self.crate_module = self.visit_module(krate.attrs.clone(),
+                                              &krate.module,
+                                              None);
+        self.crate_module.is_crate = true;
     }
 }
 
@@ -225,6 +231,7 @@ impl<'a> OxidocVisitor<'a> {
 mod tests {
     use super::*;
     use env_logger;
+    use std::collections::HashMap;
 
     fn parse_crate_from_source(source_code: &str,
                                parse_session: ParseSess) -> Result<ast::Crate> {
@@ -247,8 +254,8 @@ mod tests {
         };
 
         let mut visitor = OxidocVisitor::new(&context);
-        let module = visitor.visit_crate(krate);
-        Ok(module)
+        visitor.visit_crate(krate);
+        Ok(visitor.crate_module)
     }
 
     #[test]

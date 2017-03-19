@@ -178,6 +178,10 @@ impl ModPath {
         self.0.push(seg);
     }
 
+    pub fn push_string(&mut self, s: String) {
+        self.0.push(PathSegment { identifier: s });
+    }
+
     pub fn pop(&mut self) {
         self.0.pop();
     }
@@ -321,7 +325,7 @@ pub struct Document<T: Documentable> {
     /// The complete path to this documentation item.
     /// For example, inside crate "krate", module "module", the path for a function "some_fn" is:
     /// ModPath::from("krate::module::some_fn");
-    pub path: ModPath,
+    pub path: Option<ModPath>,
 
     /// The one-line overview of the documentation. It is the function signature for functions, "mod module" for modules, etc.
     pub signature: String,
@@ -439,8 +443,17 @@ impl<T: Documentable + Serialize + Deserialize> Display for Document<T> {
 }
 
 #[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
+pub struct NodeId(u32);
+
+impl From<ast::NodeId> for NodeId {
+    fn from(id: ast::NodeId) -> NodeId {
+        NodeId(id.as_u32())
+    }
+}
+
+#[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub struct StructField {
-    type_: String,
+    type_: ast::Ty,
     name: Option<String>,
 }
 
@@ -465,26 +478,27 @@ impl StructField {
 
 #[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub struct Struct {
-    pub name: String,
-    pub fields: Vec<StructField>,
-    pub attrs: Attributes,
+    pub name: ast::Name,
+    pub fields: Vec<ast::StructField>,
+    pub attrs: Vec<ast::Attribute>,
+    pub path: ModPath,
 }
 
 #[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub struct Function {
-    pub name: Option<String>,
-    pub unsafety: Unsafety,
-    pub constness: Constness,
+    pub name: ast::Name,
+    pub unsafety: ast::Unsafety,
+    pub constness: ast::Constness,
     // TODO: Generics
-    pub visibility: Visibility,
-    pub abi: Abi,
-    pub ty: FnKind,
-    pub attrs: Attributes,
+    pub visibility: ast::Visibility,
+    pub abi: ast::Abi,
+    pub attrs: Vec<ast::Attribute>,
+    pub path: ModPath,
 }
 
 #[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub struct Module {
-    pub name: Option<String>,
+    pub name: Option<ast::Name>,
     pub structs: Vec<Struct>,
     pub fns: Vec<Function>,
     pub mods: Vec<Module>,
@@ -494,7 +508,8 @@ pub struct Module {
     pub traits: Vec<Trait>,
     pub def_traits: Vec<DefaultImpl>,
     pub is_crate: bool,
-    pub attrs: Attributes,
+    pub attrs: Vec<ast::Attribute>,
+    pub path: ModPath,
 }
 
 impl Module {
@@ -511,39 +526,30 @@ impl Module {
             traits:     Vec::new(),
             def_traits: Vec::new(),
             is_crate:   false,
+            path:       ModPath::new(),
         }
     }
 }
 
-#[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub struct Trait {
-    pub unsafety: Unsafety,
-    pub name: String,
-    pub attrs: Attributes,
+    pub unsafety: ast::Unsafety,
+    pub name: ast::Name,
+    pub attrs: Vec<ast::Attribute>,
+    pub path: ModPath,
 }
 
-#[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub struct Enum {
-    pub variants: Vec<Variant>,
-    pub attrs: Attributes,
-    pub name: Option<String>,
+    pub name: ast::Name,
+    pub variants: Vec<ast::Variant>,
+    pub attrs: Vec<ast::Attribute>,
+    pub path: ModPath,
 }
 
-#[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub struct Variant {
-    pub name: String,
-    pub attrs: Attributes,
-    pub data: VariantData,
-}
-
-impl From<ast::Variant> for Variant {
-       fn from(variant: ast::Variant) -> Variant {
-           Variant {
-               name: pprust::ident_to_string(variant.node.name),
-               attrs: Attributes::from_ast(&variant.node.attrs),
-               data: VariantData::from(variant.node.data),
-           }
-       }
+    pub name: ast::Name,
+    pub attrs: Vec<ast::Attribute>,
+    pub data: ast::VariantData,
+    pub path: ModPath,
 }
 
 #[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
@@ -571,52 +577,35 @@ impl From<ast::VariantData> for VariantData {
        }
 }
 
-#[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub struct Constant {
-    pub type_: String,
-    pub expr: String,
-    pub name: String,
-    pub attrs: Attributes,
-}
-
-#[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
-pub struct Impl {
-    pub unsafety: Unsafety,
-    //pub generics: ast::Generics,
-    pub trait_: Option<TraitRef>,
-    pub for_: Ty,
-    pub items: Vec<ImplItem>,
-    pub attrs: Attributes,
-}
-
-#[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
-pub struct DefaultImpl {
-    pub unsafety: Unsafety,
-    pub trait_: TraitRef,
-    pub attrs: Attributes,
-}
-
-#[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
-pub struct TraitRef {
+    pub type_: ast::Ty,
+    pub expr: ast::Expr,
+    pub name: ast::Name,
+    pub attrs: Vec<ast::Attribute>,
     pub path: ModPath,
 }
 
-impl From<ast::TraitRef> for TraitRef {
-       fn from(trait_ref: ast::TraitRef) -> TraitRef {
-           TraitRef {
-               path: ModPath::from(trait_ref.path)
-           }
-       }
+pub struct Impl {
+    pub unsafety: Unsafety,
+    //pub generics: ast::Generics,
+    pub trait_: Option<ast::TraitRef>,
+    pub for_: ast::Ty,
+    pub items: Vec<ast::ImplItem>,
+    pub attrs: Vec<ast::Attribute>,
 }
 
-#[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
+pub struct DefaultImpl {
+    pub unsafety: ast::Unsafety,
+    pub trait_: ast::TraitRef,
+    pub attrs: Vec<ast::Attribute>,
+}
+
 pub struct ImplItem {
     
 }
 
-#[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub struct Ty {
-    ty: String,
+
 }
 
 impl From<ast::Ty> for Ty {
@@ -624,99 +613,5 @@ impl From<ast::Ty> for Ty {
         Ty {
             ty: pprust::to_string(|s| s.print_type(&ty)),
         }
-    }
-}
-
-// -----
-// mod crate::the_mod
-// -----
-// A useful module.
-//
-// == Functions:
-// function_a(), function_b(), function_c()
-//
-// == Statics:
-// STATIC_A, STATIC_B
-//
-// == Enums:
-// CoolEnum, NiceEnum
-
-
-
-// == (impl on crate::MyStruct)
-// -----
-// struct name_of_struct { /* fields omitted */ }
-// -----
-// Does a thing.
-//
-// == Functions:
-// function_a(), function_b(), function_c()
-//
-// ==== from trait crate::NiceTrait:
-// cool(), sweet(), okay()
-
-// TODO: Testing a new design.
-struct NewDocTemp_ {
-    name: String,
-    docstring: Option<String>,
-    mod_path: ModPath,
-    inner_data: DocType,
-    // source code reference
-    // References to other documents
-    links: HashMap<DocType, Vec<DocLink>>,
-}
-
-impl NewDocTemp_ {
-    fn get_doc_filename(&self) -> String {
-        let prefix = self.inner_data.get_doc_file_prefix();
-        format!("{}{}.odoc", prefix, self.name)
-    }
-
-    fn render(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, r#"
-(crate info)
-=== doc info
-------------------------------------------------------------------------------
-  {}
-
-------------------------------------------------------------------------------
-
-{}
-
-{}
-"#, self.name, "(docstring)", "(references)")
-    }
-}
-
-struct DocLink {
-    name: String,
-    link_path: ModPath,
-}
-
-/// Describes all possible types of documentation.
-#[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
-enum DocType {
-    FnDoc(Function),
-    ModuleDoc(Module),
-    EnumDoc(Enum),
-    StructDoc(Struct),
-    ConstDoc(Constant),
-    //StaticDoc,
-    // Union,
-    //TypedefDoc,
-    TraitDoc(Trait),
-}
-
-impl DocType {
-    fn get_doc_file_prefix(&self) -> String {
-        match *self {
-            DocType::ModuleDoc(..) => "mdesc-",
-            DocType::EnumDoc(..)   => "edesc-",
-            DocType::StructDoc(..) => "sdesc-",
-            DocType::ConstDoc(..)  => "cdesc-",
-            DocType::TraitDoc(..)  => "tdesc-",
-            DocType::FnDoc(..) |
-            _             => "",
-        }.to_string()
     }
 }
