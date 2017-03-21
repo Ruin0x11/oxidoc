@@ -5,7 +5,8 @@ use store::*;
 use std::collections::HashMap;
 use std::fmt;
 use std::fmt::Display;
-use document::*;
+use document::{ModPath};
+use convert::*;
 
 mod errors {
     error_chain! {
@@ -15,7 +16,7 @@ mod errors {
             }
         }
     }
-    
+
 }
 use errors::*;
 
@@ -76,27 +77,26 @@ impl Driver {
     }
 
     /// Attempts to find a fn named 'name' in the oxidoc stores and print its documentation.
-    fn display_doc<T: Documentable + Serialize + Deserialize>(&self, name: &ModPath) -> Result<()> {
+    fn display_doc(&self, name: &ModPath) -> Result<()> {
         // TODO: Attempt to filter here for a single match
         // If no match, list functions that have similar names
-        let docs = self.load_docs_matching::<T>(&name).
+        let docs = self.load_docs_matching(&name).
             chain_err(|| format!("No documents match the given name {}", &name))?;
 
         println!("= {}", &name);
 
         for doc in docs {
-            // TODO: document construction should happen
-            println!("{}", &doc);
+            //println!("{}", &doc);
         }
         Ok(())
     }
 
-    fn load_docs_matching<T: Documentable + Serialize + Deserialize>(&self, name: &ModPath) -> Result<Vec<Document<T>>> {
+    fn load_docs_matching(&self, name: &ModPath) -> Result<Vec<NewDocTemp_>> {
         let mut found = Vec::new();
         for loc in self.stores_containing(name).unwrap() {
             let full_path = ModPath::join(&loc.path, name);
-            if let Ok(module) = loc.store.load_doc::<T>(&full_path) {
-                info!("Found the documentation {} looking for {}", &module, &name);
+            if let Ok(module) = loc.store.load_doc(&full_path) {
+                //info!("Found the documentation {} looking for {}", &module, &name);
                 found.push(module);
             }
         }
@@ -104,7 +104,6 @@ impl Driver {
             bail!("No modules matched name {}", name);
         }
         Ok(found)
-            
     }
 
     /// Obtains a list of oxidoc stores the given documentation identifier could possibly exist in.

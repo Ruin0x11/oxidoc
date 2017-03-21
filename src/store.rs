@@ -10,6 +10,7 @@ use std::io::{Read, Write};
 
 use ::errors::*;
 use document::*;
+use convert::NewDocTemp_;
 
 /// Defines an exact location a documentation file can be found.
 #[derive(Debug)]
@@ -34,6 +35,8 @@ pub struct Store {
     pub name: String,
     pub path: PathBuf,
 
+    documents: Vec<NewDocTemp_>,
+
     // Locations of documentation in the store
     modpaths: HashSet<ModPath>,
     functions: HashMap<ModPath, HashSet<FunctionName>>,
@@ -45,6 +48,7 @@ impl Store {
         Store {
             name: "".to_string(),
             path: path,
+            documents: Vec::new(),
             modpaths: HashSet::new(),
             functions: HashMap::new(),
             structs: HashMap::new(),
@@ -97,12 +101,9 @@ impl Store {
         }
     }
 
-    pub fn load_doc<T: Documentable + Serialize + Deserialize>(&self, doc_path: &ModPath) -> Result<Document<T>> {
+    pub fn load_doc(&self, doc_path: &ModPath) -> Result<NewDocTemp_> {
         info!("Store path: {}, Doc path: {}", &self.path.display(), &doc_path);
-        match Document::load_doc(self.path.clone(), doc_path) {
-            Ok(doc) => Ok(doc),
-            Err(e) => Err(e)
-        }
+        bail!("asd")
     }
     /// Saves all documentation data that is in-memory to disk.
     pub fn save(&self) -> Result<()> {

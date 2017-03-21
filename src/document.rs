@@ -1,5 +1,3 @@
-use serde::ser::{Serialize};
-use serde::de::{Deserialize};
 use std::fs::{File, create_dir_all};
 use std::io::{Read, Write};
 use std::collections::HashMap;
@@ -14,127 +12,6 @@ use paths;
 use store::Store;
 
 use ::errors::*;
-
-#[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
-enum Selector {
-    OnModule,
-    OnTrait,
-    OnStruct,
-}
-
-/// Defines a path and identifier for a documentation item, as well as if it belongs to a struct, trait, or directly under a module.
-#[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
-pub struct DocSig {
-    pub scope: Option<ModPath>,
-    //pub selector: Option<Selector>,
-    pub identifier: String,
-}
-
-impl Display for DocSig {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let mut scope = match self.scope {
-            Some(ref scope) => scope.clone(),
-            None => ModPath(Vec::new())
-        };
-        scope.push(PathSegment{identifier: self.identifier.clone()});
-
-        write!(f, "{}", scope.to_string())
-    }
-}
-
-// There are redundant enums because we can't derive Serialize/Deserialize on ast's types.
-#[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
-pub enum Unsafety {
-    Unsafe,
-    Normal,
-}
-
-impl From<ast::Unsafety> for Unsafety {
-    fn from(uns: ast::Unsafety) -> Unsafety {
-        match uns {
-            ast::Unsafety::Normal => Unsafety::Normal,
-            ast::Unsafety::Unsafe => Unsafety::Unsafe,
-        }
-    }
-}
-
-#[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
-pub enum Constness {
-    Const,
-    NotConst,
-}
-
-impl From<ast::Constness> for Constness {
-    fn from(con: ast::Constness) -> Constness {
-        match con {
-            ast::Constness::Const    => Constness::Const,
-            ast::Constness::NotConst => Constness::NotConst,
-        }
-    }
-}
-
-#[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
-pub enum Visibility {
-    Public,
-    Private,
-    Inherited,
-}
-
-impl From<ast::Visibility> for Visibility{
-    fn from(vis: ast::Visibility) -> Visibility {
-        match vis {
-            ast::Visibility::Public    => Visibility::Public,
-            ast::Visibility::Inherited => Visibility::Inherited,
-            _                          => Visibility::Private,
-        }
-    }
-}
-
-#[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
-pub enum Abi {
-    // Single platform ABIs
-    Cdecl,
-    Stdcall,
-    Fastcall,
-    Vectorcall,
-    Aapcs,
-    Win64,
-    SysV64,
-    PtxKernel,
-    Msp430Interrupt,
-
-    // Multiplatform / generic ABIs
-    Rust,
-    C,
-    System,
-    RustIntrinsic,
-    RustCall,
-    PlatformIntrinsic,
-    Unadjusted
-}
-
-impl From<abi::Abi> for Abi {
-    fn from(abi: abi::Abi) -> Abi {
-        match abi {
-            abi::Abi::Cdecl             => Abi::Cdecl,
-            abi::Abi::Stdcall           => Abi::Stdcall,
-            abi::Abi::Fastcall          => Abi::Fastcall,
-            abi::Abi::Vectorcall        => Abi::Vectorcall,
-            abi::Abi::Aapcs             => Abi::Aapcs,
-            abi::Abi::Win64             => Abi::Win64,
-            abi::Abi::SysV64            => Abi::SysV64,
-            abi::Abi::PtxKernel         => Abi::PtxKernel,
-            abi::Abi::Msp430Interrupt   => Abi::Msp430Interrupt,
-            abi::Abi::Rust              => Abi::Rust,
-            abi::Abi::C                 => Abi::C,
-            abi::Abi::System            => Abi::System,
-            abi::Abi::RustIntrinsic     => Abi::RustIntrinsic,
-            abi::Abi::RustCall          => Abi::RustCall,
-            abi::Abi::PlatformIntrinsic => Abi::PlatformIntrinsic,
-            abi::Abi::Unadjusted        => Abi::Unadjusted
-        }
-    }
-}
 
 #[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub enum FnKind {
@@ -261,13 +138,6 @@ pub trait Documentable {
     fn get_filename(name: String) -> String;
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub enum DocItem {
-    FnItem(Function),
-    StructItem(Struct),
-    ModuleItem(Module),
-}
-
 #[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub struct Attributes {
     pub docstrings: Vec<String>,
@@ -311,137 +181,6 @@ impl Attributes {
     }
 }
 
-/// Defines a single documentation item that can be drawn.
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Document<T: Documentable> {
-    /// Documentation information specific to the type being documented.
-    /// Functions have ABI, unsafety, etc. while modules can contain references to other documentation.
-    pub doc: T,
-
-    /// Information about the crate the documentation resides in.
-    /// Redundant.
-    pub crate_info: CrateInfo,
-
-    /// The complete path to this documentation item.
-    /// For example, inside crate "krate", module "module", the path for a function "some_fn" is:
-    /// ModPath::from("krate::module::some_fn");
-    pub path: Option<ModPath>,
-
-    /// The one-line overview of the documentation. It is the function signature for functions, "mod module" for modules, etc.
-    pub signature: String,
-
-    pub attrs: Attributes,
-}
-
-impl<T: Documentable + Serialize + Deserialize> Document<T> {
-    fn render(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let doc = match self.attrs.doc_value() {
-            Some(d) => d,
-            None    => "",
-        };
-        write!(f, r#"
-(from crate {})
-=== {}
-------------------------------------------------------------------------------
-  {}
-
-------------------------------------------------------------------------------
-
-{}
-"#, self.crate_info, self.doc.get_info(&self.path), self.signature, doc)
-    }
-
-    /// Get the output filename for saving this Document to disk, excluding path.
-    pub fn get_filename(&self) -> Result<String> {
-        let docfile = paths::encode_doc_filename(&self.path.name().unwrap().identifier)
-            .chain_err(|| "Could not encode doc filename")?;
-
-        Ok(T::get_filename(docfile))
-    }
-
-    /// Get the complete path to a documentation file, given the path to the store it resides in.
-    fn get_docfile(&self, store_path: &PathBuf) -> Result<PathBuf> {
-        let parent = self.path.parent();
-
-        let name = self.get_filename()
-            .chain_err(|| "Could not resolve documentation filename")?;
-
-        let doc_path = match parent {
-            Some(par) => {
-                let local_path = par.to_path().join(name);
-                store_path.join(local_path)
-            }
-            None => {
-                // TODO: Crates need to be handled seperately.
-                // This is the crate's documentation, which lives directly under the store path.
-                store_path.join(name)
-            }
-        };
-
-        Ok(doc_path)
-    }
-
-    /// Writes a .odoc JSON store to disk.
-    pub fn save_doc(&self, path: &PathBuf) -> Result<PathBuf> {
-        let json = serde_json::to_string(&self).unwrap();
-
-        let outfile = self.get_docfile(path)
-            .chain_err(|| format!("Could not obtain docfile path inside {}", path.display()))?;
-
-        create_dir_all(outfile.parent().unwrap())
-            .chain_err(|| format!("Failed to create module dir {}", path.display()))?;
-
-        let mut fp = File::create(&outfile)
-            .chain_err(|| format!("Could not write function odoc file {}", outfile.display()))?;
-        fp.write_all(json.as_bytes())
-            .chain_err(|| format!("Failed to write to function odoc file {}", outfile.display()))?;
-
-        // Insert the module name into the list of known module names
-
-        info!("Wrote doc to {}", &outfile.display());
-
-        Ok(outfile)
-    }
-
-    /// Attempt to load the documentation for a fully qualified documentation path inside the given store path.
-    pub fn load_doc(store_path: PathBuf, doc_path: &ModPath) -> Result<Self> {
-        let identifier = doc_path.name().unwrap().identifier.clone();
-        let encoded_name = paths::encode_doc_filename(&identifier)
-            .chain_err(|| "Could not encode doc filename")?;
-
-        let full_path = match doc_path.parent() {
-            Some(scope) => {
-                store_path.join(scope.to_path())
-                    .join(T::get_filename(encoded_name))
-            }
-            None => {
-                store_path.join(T::get_filename(encoded_name))
-            }
-        };
-
-        info!("Attempting to load doc at {}", &full_path.display());
-
-        let mut fp = File::open(&full_path)
-            .chain_err(|| format!("Couldn't find oxidoc store {}", full_path.display()))?;
-
-        let mut json = String::new();
-        fp.read_to_string(&mut json)
-            .chain_err(|| format!("Couldn't read oxidoc store {}", full_path.display()))?;
-
-        info!("Loading {}", full_path.display());
-        let doc: Self = serde_json::from_str(&json)
-            .chain_err(|| "Couldn't parse oxidoc store (regen probably needed)")?;
-
-        Ok(doc)
-    }
-}
-
-impl<T: Documentable + Serialize + Deserialize> Display for Document<T> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        self.render(f)
-    }
-}
-
 #[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub struct NodeId(u32);
 
@@ -451,54 +190,31 @@ impl From<ast::NodeId> for NodeId {
     }
 }
 
-#[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub struct StructField {
     type_: ast::Ty,
     name: Option<String>,
 }
 
-impl From<ast::StructField> for StructField {
-    fn from(field: ast::StructField) -> StructField {
-        let name = match field.ident {
-            Some(ident) => Some(pprust::ident_to_string(ident)),
-            None       => None,
-        };
-        StructField {
-            type_: pprust::to_string(|s| s.print_type(&field.ty)),
-            name: name,
-        }
-    }
-}
-
-impl StructField {
-    pub fn from_variant_data(fields: &[ast::StructField]) -> Vec<StructField> {
-        fields.iter().cloned().map(|vd| StructField::from(vd)).collect()
-    }
-}
-
-#[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub struct Struct {
-    pub name: ast::Name,
+    pub ident: ast::Ident,
     pub fields: Vec<ast::StructField>,
     pub attrs: Vec<ast::Attribute>,
     pub path: ModPath,
 }
 
-#[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub struct Function {
-    pub name: ast::Name,
+    pub ident: ast::Ident,
     pub unsafety: ast::Unsafety,
     pub constness: ast::Constness,
     // TODO: Generics
     pub visibility: ast::Visibility,
-    pub abi: ast::Abi,
+    pub abi: abi::Abi,
     pub attrs: Vec<ast::Attribute>,
     pub path: ModPath,
 }
 
-#[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub struct Module {
-    pub name: Option<ast::Name>,
+    pub ident: Option<ast::Ident>,
     pub structs: Vec<Struct>,
     pub fns: Vec<Function>,
     pub mods: Vec<Module>,
@@ -513,10 +229,10 @@ pub struct Module {
 }
 
 impl Module {
-    pub fn new(name: Option<String>) -> Module {
+    pub fn new(ident: Option<ast::Ident>) -> Module {
         Module {
-            name:       name,
-            attrs:      Attributes::new(),
+            ident:      ident,
+            attrs:      Vec::new(),
             structs:    Vec::new(),
             fns:        Vec::new(),
             mods:       Vec::new(),
@@ -533,60 +249,35 @@ impl Module {
 
 pub struct Trait {
     pub unsafety: ast::Unsafety,
-    pub name: ast::Name,
+    pub ident: ast::Ident,
     pub attrs: Vec<ast::Attribute>,
     pub path: ModPath,
 }
 
 pub struct Enum {
-    pub name: ast::Name,
+    pub ident: ast::Ident,
     pub variants: Vec<ast::Variant>,
     pub attrs: Vec<ast::Attribute>,
     pub path: ModPath,
 }
 
 pub struct Variant {
-    pub name: ast::Name,
+    pub ident: ast::Ident,
     pub attrs: Vec<ast::Attribute>,
     pub data: ast::VariantData,
     pub path: ModPath,
 }
 
-#[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
-pub enum VariantData {
-    Struct(Vec<StructField>),
-    Tuple(Vec<StructField>),
-    Unit,
-}
-
-impl From<ast::VariantData> for VariantData {
-       fn from(variant: ast::VariantData) -> VariantData {
-           match variant {
-               ast::VariantData::Struct(fields, _) => {
-                   let my_fields = StructField::from_variant_data(&fields);
-                   VariantData::Struct(my_fields)
-               }
-               ast::VariantData::Tuple(fields, _) => {
-                   let my_fields = StructField::from_variant_data(&fields);
-                   VariantData::Tuple(my_fields)
-               }
-               ast::VariantData::Unit(_) => {
-                   VariantData::Unit
-               }
-           }
-       }
-}
-
 pub struct Constant {
     pub type_: ast::Ty,
     pub expr: ast::Expr,
-    pub name: ast::Name,
+    pub ident: ast::Ident,
     pub attrs: Vec<ast::Attribute>,
     pub path: ModPath,
 }
 
 pub struct Impl {
-    pub unsafety: Unsafety,
+    pub unsafety: ast::Unsafety,
     //pub generics: ast::Generics,
     pub trait_: Option<ast::TraitRef>,
     pub for_: ast::Ty,
@@ -601,17 +292,9 @@ pub struct DefaultImpl {
 }
 
 pub struct ImplItem {
-    
+
 }
 
 pub struct Ty {
 
-}
-
-impl From<ast::Ty> for Ty {
-    fn from(ty: ast::Ty) -> Ty {
-        Ty {
-            ty: pprust::to_string(|s| s.print_type(&ty)),
-        }
-    }
 }

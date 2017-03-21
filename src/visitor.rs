@@ -32,78 +32,75 @@ impl<'a> OxidocVisitor<'a> {
         }
     }
 
-    fn make_modpath(&self, name: String) -> ModPath {
-        let path = self.current_scope.clone();
+    fn make_modpath(&self, ident: ast::Ident) -> ModPath {
+        let mut path = self.current_scope.clone();
+        let name = pprust::ident_to_string(ident);
         path.push_string(name);
         path
     }
 
     fn visit_enum_def(&mut self, item: &ast::Item,
-                      name: String,
                       enum_def: &ast::EnumDef,
                       generics: &ast::Generics) -> Enum {
         Enum {
-            name: name,
-            variants: enum_def.variants.iter().cloned().map(|x| Variant::from(x)).collect(),
-            attrs: Attributes::from_ast(&item.attrs),
-            path: self.make_modpath(name),
+            ident: item.ident,
+            variants: enum_def.variants.clone(),
+            attrs: item.attrs.clone(),
+            path: self.make_modpath(item.ident),
         }
     }
 
     fn visit_fn(&mut self, item: &ast::Item,
-                name: String,
                 fn_decl: &ast::FnDecl,
                 ast_unsafety: ast::Unsafety,
                 ast_constness: ast::Constness,
                 ast_abi: abi::Abi,
                 generics: &ast::Generics) -> Function {
         Function {
-            name: name,
-            unsafety: Unsafety::from(ast_unsafety),
-            constness: Constness::from(ast_constness),
-            visibility: Visibility::Inherited,
-            abi: Abi::from(ast_abi),
-            attrs: Attributes::from_ast(&item.attrs),
-            path: self.make_modpath(name),
+            ident: item.ident,
+            unsafety: ast_unsafety,
+            constness: ast_constness,
+            visibility: ast::Visibility::Inherited,
+            abi: ast_abi,
+            attrs: item.attrs.clone(),
+            path: self.make_modpath(item.ident),
         }
     }
 
     fn visit_const(&self, item: &ast::Item,
                    ast_ty: &ast::Ty,
                    ast_expr: &ast::Expr,
-                   name: String) -> Constant {
+                   ) -> Constant {
         Constant {
-            type_: pprust::to_string(|s| s.print_type(ast_ty)),
-            expr:  pprust::to_string(|s| s.print_expr_maybe_paren(ast_expr)),
-            name:  name,
-            attrs: Attributes::from_ast(&item.attrs),
-            path: self.make_modpath(name),
+            ident: item.ident,
+            type_: ast_ty.clone(),
+            expr:  ast_expr.clone(),
+            attrs: item.attrs.clone(),
+            path: self.make_modpath(item.ident),
         }
     }
 
     fn visit_struct(&self, item: &ast::Item,
-                    name: String,
                     variant_data: &ast::VariantData,
                     ast_generics: &ast::Generics) -> Struct {
         Struct {
-            name: name,
-            fields: StructField::from_variant_data(variant_data.fields()),
-            attrs: Attributes::from_ast(&item.attrs),
-            path: self.make_modpath(name),
+            ident: item.ident,
+            fields: variant_data.fields().iter().cloned().collect(),
+            attrs: item.attrs.clone(),
+            path: self.make_modpath(item.ident),
         }
-        
+
     }
 
     fn visit_trait(&self, item: &ast::Item,
-                   name: String,
                    ast_unsafety: ast::Unsafety,
                    ast_generics: &ast::Generics,
                    trait_items: &Vec<ast::TraitItem>) -> Trait {
         Trait {
-            name: name,
-            unsafety: Unsafety::from(ast_unsafety),
-            attrs: Attributes::from_ast(&item.attrs),
-            path: self.make_modpath(name),
+            ident: item.ident,
+            unsafety: ast_unsafety,
+            attrs: item.attrs.clone(),
+            path: self.make_modpath(item.ident),
         }
     }
 
@@ -113,18 +110,12 @@ impl<'a> OxidocVisitor<'a> {
                   ast_trait_ref: &Option<ast::TraitRef>,
                   ty: &ast::Ty,
                   items: &Vec<ast::ImplItem>) -> Impl {
-        let trait_ = match *ast_trait_ref {
-            Some(ref tr) => Some(TraitRef::from(tr.clone())),
-            None     => None,
-        };
         Impl {
-            unsafety: Unsafety::from(ast_unsafety),
-            trait_: trait_,
-            for_: Ty::from(ty.clone()),
-            items: items.iter().map(|x| ImplItem {
-                // TODO: implement
-            }).collect(),
-            attrs: Attributes::from_ast(&item.attrs),
+            unsafety: ast_unsafety,
+            trait_: ast_trait_ref.clone(),
+            for_: ty.clone(),
+            items: items.clone(),
+            attrs: item.attrs.clone(),
         }
     }
 
@@ -132,41 +123,40 @@ impl<'a> OxidocVisitor<'a> {
                           ast_unsafety: ast::Unsafety,
                           ast_trait_ref: &ast::TraitRef) -> DefaultImpl {
         DefaultImpl {
-            unsafety: Unsafety::from(ast_unsafety),
-            trait_: TraitRef::from(ast_trait_ref.clone()),
-            attrs: Attributes::from_ast(&item.attrs),
+            unsafety: ast_unsafety,
+            trait_: ast_trait_ref.clone(),
+            attrs: item.attrs.clone(),
         }
     }
 
     fn visit_item(&mut self, item: &ast::Item, module: &mut Module) {
-        let name = pprust::ident_to_string(item.ident);
         match item.node {
             ast::ItemKind::Use(ref view_path) => {
                 // TODO: Resolve 'use'd paths
             },
             ast::ItemKind::Const(ref ty, ref expr) => {
-                let c = self.visit_const(item, ty, expr, name);
+                let c = self.visit_const(item, ty, expr);
                 module.consts.push(c);
             }
             ast::ItemKind::Fn(ref decl, unsafety, constness,
                               abi, ref generics, _) => {
-                let f = self.visit_fn(item, name, &*decl,
+                let f = self.visit_fn(item, &*decl,
                                       unsafety, constness.node,
                                       abi, generics);
                 module.fns.push(f);
             },
-            ast::ItemKind::Mod(ref m) => {
+            ast::ItemKind::Mod(ref mod_) => {
                 let m = self.visit_module(item.attrs.clone(),
-                                          m, Some(name));
+                                          mod_, Some(item.ident));
                 module.mods.push(m);
             },
             ast::ItemKind::Enum(ref def, ref generics) => {
-                let e = self.visit_enum_def(item, name,
+                let e = self.visit_enum_def(item, 
                                             def, generics);
                 module.enums.push(e);
             },
             ast::ItemKind::Struct(ref variant_data, ref generics) => {
-                let s = self.visit_struct(item, name,
+                let s = self.visit_struct(item, 
                                           variant_data,
                                           generics);
                 module.structs.push(s);
@@ -176,11 +166,11 @@ impl<'a> OxidocVisitor<'a> {
             },
             ast::ItemKind::Trait(unsafety, ref generics,
                                  ref param_bounds, ref trait_items) => {
-                let t = self.visit_trait(item, name,
+                let t = self.visit_trait(item, 
                                          unsafety, generics,
                                          trait_items);
                 module.traits.push(t);
-                
+
             },
             ast::ItemKind::DefaultImpl(unsafety, ref trait_ref) => {
                 let def_trait = self.visit_default_impl(item, unsafety,
@@ -208,9 +198,9 @@ impl<'a> OxidocVisitor<'a> {
     }
 
     fn visit_module(&mut self, attrs: Vec<ast::Attribute>, m: &ast::Mod,
-                    mod_name: Option<String>) -> Module {
+                    mod_name: Option<ast::Ident>) -> Module {
         let mut module = Module::new(mod_name);
-        module.attrs = Attributes::from_ast(&attrs);
+        module.attrs = attrs.clone();
 
         for item in &m.items {
             self.visit_item(item, &mut module);
@@ -244,7 +234,7 @@ mod tests {
             Err(_) => bail!("Failed to parse"),
         }
     }
-    
+
     fn test_harness(source_code: &str) -> Result<Module> {
         let parse_session = ParseSess::new();
         let krate = parse_crate_from_source(source_code, parse_session)?;
@@ -267,14 +257,6 @@ mod tests {
             }
         }"#).unwrap();
         let first_mod = module.mods.iter().next().unwrap();
-        assert_eq!(
-            first_mod.name,
-            Some("a".to_string())
-        );
         let second_mod = first_mod.mods.iter().next().unwrap();
-        assert_eq!(
-            second_mod.name,
-            Some("b".to_string())
-        );
     }
 }
