@@ -131,6 +131,7 @@ fn generate_doc_cache(krate: ast::Crate, crate_info: CrateInfo) -> Result<Store>
 
     let context = Context {
         store_path: crate_doc_path,
+        crate_info: crate_info,
     };
 
     let store = {

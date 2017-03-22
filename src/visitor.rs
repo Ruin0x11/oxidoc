@@ -58,9 +58,10 @@ impl<'a> OxidocVisitor<'a> {
                 generics: &ast::Generics) -> Function {
         Function {
             ident: item.ident,
+            decl: fn_decl.clone(),
             unsafety: ast_unsafety,
             constness: ast_constness,
-            visibility: ast::Visibility::Inherited,
+            vis: item.vis.clone(),
             abi: ast_abi,
             attrs: item.attrs.clone(),
             path: self.make_modpath(item.ident),
@@ -98,7 +99,15 @@ impl<'a> OxidocVisitor<'a> {
                    ast_generics: &ast::Generics,
                    trait_items: &Vec<ast::TraitItem>) -> Trait {
         Trait {
-            items: trait_items.clone(),
+            items: trait_items.iter().cloned().map(|ti| {
+                TraitItem {
+                    ident: ti.ident,
+                    attrs: ti.attrs.clone(),
+                    path: ModPath::join(&self.make_modpath(item.ident),
+                                        &ModPath::from(ti.ident)),
+                    node: ti.node,
+                }
+            }).collect(),
             ident: item.ident,
             unsafety: ast_unsafety,
             vis: item.vis.clone(),
@@ -206,11 +215,22 @@ impl<'a> OxidocVisitor<'a> {
         let mut module = Module::new(mod_name);
         module.attrs = attrs.clone();
 
+        if let Some(name) = mod_name {
+            self.current_scope.push_string(pprust::ident_to_string(name));
+        }
+        else {
+            self.current_scope.push_string(self.ctxt.crate_info.package.name.clone());
+        }
+
+        module.path = self.current_scope.clone();
+
+        debug!("path: {}", self.current_scope);
+
         for item in &m.items {
             self.visit_item(item, &mut module);
         }
 
-        debug!("{:?}", module.consts);
+        self.current_scope.pop();
 
         module
     }
@@ -246,8 +266,16 @@ mod tests {
         let parse_session = ParseSess::new();
         let krate = parse_crate_from_source(source_code, parse_session)?;
 
+        let crate_info = CrateInfo {
+            package: Package {
+                name: "test".to_string(),
+                version: "0.1.0".to_string(),
+            }
+        };
+
         let context = Context {
             store_path: PathBuf::from("~/.cargo/registry/doc/test-0.1.0"),
+            crate_info: crate_info
         };
 
         let mut visitor = OxidocVisitor::new(&context);

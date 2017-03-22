@@ -100,6 +100,12 @@ impl From<String> for ModPath {
     }
 }
 
+impl From<ast::Ident> for ModPath {
+    fn from(i: ast::Ident) -> ModPath {
+        ModPath::from(pprust::ident_to_string(i))
+    }
+}
+
 impl From<ast::Path> for ModPath {
     fn from(p: ast::Path) -> ModPath {
         ModPath(p.segments.iter().map(|s| PathSegment { identifier: pprust::ident_to_string(s.identifier) }).collect::<Vec<PathSegment>>())
@@ -209,8 +215,9 @@ pub struct Function {
     pub ident: ast::Ident,
     pub unsafety: ast::Unsafety,
     pub constness: ast::Constness,
+    pub decl: ast::FnDecl,
     // TODO: Generics
-    pub visibility: ast::Visibility,
+    pub vis: ast::Visibility,
     pub abi: abi::Abi,
     pub attrs: Vec<ast::Attribute>,
     pub path: ModPath,
@@ -219,6 +226,7 @@ pub struct Function {
 #[derive(Clone, Debug)]
 pub struct Module {
     pub ident: Option<ast::Ident>,
+    pub vis: ast::Visibility,
     pub structs: Vec<Struct>,
     pub fns: Vec<Function>,
     pub mods: Vec<Module>,
@@ -236,6 +244,7 @@ impl Module {
     pub fn new(ident: Option<ast::Ident>) -> Module {
         Module {
             ident:      ident,
+            vis:        ast::Visibility::Inherited,
             attrs:      Vec::new(),
             structs:    Vec::new(),
             fns:        Vec::new(),
@@ -253,14 +262,20 @@ impl Module {
 
 #[derive(Clone, Debug)]
 pub struct Trait {
-    pub items: Vec<ast::TraitItem>,
+    pub items: Vec<TraitItem>,
     pub ident: ast::Ident,
     pub unsafety: ast::Unsafety,
     pub vis: ast::Visibility,
     pub attrs: Vec<ast::Attribute>,
     pub path: ModPath,
 }
-
+#[derive(Clone, Debug)]
+pub struct TraitItem {
+    pub ident: ast::Ident,
+    pub attrs: Vec<ast::Attribute>,
+    pub path: ModPath,
+    pub node: ast::TraitItemKind,
+}
 #[derive(Clone, Debug)]
 pub struct Enum {
     pub ident: ast::Ident,
