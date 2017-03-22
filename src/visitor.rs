@@ -75,6 +75,7 @@ impl<'a> OxidocVisitor<'a> {
             ident: item.ident,
             type_: ast_ty.clone(),
             expr:  ast_expr.clone(),
+            vis: item.vis.clone(),
             attrs: item.attrs.clone(),
             path: self.make_modpath(item.ident),
         }
@@ -97,8 +98,10 @@ impl<'a> OxidocVisitor<'a> {
                    ast_generics: &ast::Generics,
                    trait_items: &Vec<ast::TraitItem>) -> Trait {
         Trait {
+            items: trait_items.clone(),
             ident: item.ident,
             unsafety: ast_unsafety,
+            vis: item.vis.clone(),
             attrs: item.attrs.clone(),
             path: self.make_modpath(item.ident),
         }
@@ -151,12 +154,12 @@ impl<'a> OxidocVisitor<'a> {
                 module.mods.push(m);
             },
             ast::ItemKind::Enum(ref def, ref generics) => {
-                let e = self.visit_enum_def(item, 
+                let e = self.visit_enum_def(item,
                                             def, generics);
                 module.enums.push(e);
             },
             ast::ItemKind::Struct(ref variant_data, ref generics) => {
-                let s = self.visit_struct(item, 
+                let s = self.visit_struct(item,
                                           variant_data,
                                           generics);
                 module.structs.push(s);
@@ -166,7 +169,7 @@ impl<'a> OxidocVisitor<'a> {
             },
             ast::ItemKind::Trait(unsafety, ref generics,
                                  ref param_bounds, ref trait_items) => {
-                let t = self.visit_trait(item, 
+                let t = self.visit_trait(item,
                                          unsafety, generics,
                                          trait_items);
                 module.traits.push(t);
@@ -199,6 +202,7 @@ impl<'a> OxidocVisitor<'a> {
 
     fn visit_module(&mut self, attrs: Vec<ast::Attribute>, m: &ast::Mod,
                     mod_name: Option<ast::Ident>) -> Module {
+        debug!("visiting module");
         let mut module = Module::new(mod_name);
         module.attrs = attrs.clone();
 
@@ -206,10 +210,13 @@ impl<'a> OxidocVisitor<'a> {
             self.visit_item(item, &mut module);
         }
 
+        debug!("{:?}", module.consts);
+
         module
     }
 
     pub fn visit_crate(&mut self, krate: ast::Crate) {
+        debug!("visiting crate");
         self.crate_module = self.visit_module(krate.attrs.clone(),
                                               &krate.module,
                                               None);

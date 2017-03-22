@@ -104,7 +104,6 @@ fn cache_doc_for_crate(crate_path: &PathBuf) -> Result<()> {
     let store = generate_doc_cache(krate, info)
         .chain_err(|| "Failed to generate doc cache")?;
 
-    // TODO: save all to disk once, not as we go
     store.save()
         .chain_err(|| "Couldn't save oxidoc data for module")
 }
@@ -123,6 +122,8 @@ fn get_crate_doc_path(crate_info: &CrateInfo) -> Result<PathBuf> {
     Ok(path)
 }
 
+const asd: i32 = 1;
+
 /// Generates documentation for the given crate.
 fn generate_doc_cache(krate: ast::Crate, crate_info: CrateInfo) -> Result<Store> {
     let crate_doc_path = get_crate_doc_path(&crate_info)
@@ -137,6 +138,12 @@ fn generate_doc_cache(krate: ast::Crate, crate_info: CrateInfo) -> Result<Store>
         v.visit_crate(krate);
         v.convert(&context)
     };
+
+    println!("Documents: {}", store.documents.len());
+
+    for doc in &store.documents {
+        println!("{}", doc);
+    }
 
     Ok(store)
 }

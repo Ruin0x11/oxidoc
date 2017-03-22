@@ -34,8 +34,7 @@ type StructName = String;
 pub struct Store {
     pub name: String,
     pub path: PathBuf,
-
-    documents: Vec<NewDocTemp_>,
+    pub documents: Vec<NewDocTemp_>,
 
     // Locations of documentation in the store
     modpaths: HashSet<ModPath>,
@@ -83,7 +82,6 @@ impl Store {
 
         info!("odoc: {}", &path.display());
         let module_names: HashSet<ModPath> = serde_json::from_str(&json).unwrap();
-        info!("MN: {:?}", &module_names);
         self.modpaths = module_names;
 
         Ok(())

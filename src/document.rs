@@ -140,13 +140,13 @@ pub trait Documentable {
 
 #[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub struct Attributes {
-    pub docstrings: Vec<String>,
+    pub doc_strings: Vec<String>,
 }
 
 impl Attributes {
     pub fn new() -> Attributes {
         Attributes {
-            docstrings: Vec::new(),
+            doc_strings: Vec::new(),
         }
     }
 
@@ -169,7 +169,7 @@ impl Attributes {
             })
         }).collect();
         Attributes {
-            docstrings: doc_strings,
+            doc_strings: doc_strings,
             //other_attrs: other_attrs,
         }
     }
@@ -177,7 +177,7 @@ impl Attributes {
     /// Finds the `doc` attribute as a NameValue and returns the corresponding
     /// value found.
     pub fn doc_value<'a>(&'a self) -> Option<&'a str> {
-        self.docstrings.first().map(|s| &s[..])
+        self.doc_strings.first().map(|s| &s[..])
     }
 }
 
@@ -190,11 +190,13 @@ impl From<ast::NodeId> for NodeId {
     }
 }
 
+#[derive(Clone, Debug)]
 pub struct StructField {
     type_: ast::Ty,
     name: Option<String>,
 }
 
+#[derive(Clone, Debug)]
 pub struct Struct {
     pub ident: ast::Ident,
     pub fields: Vec<ast::StructField>,
@@ -202,6 +204,7 @@ pub struct Struct {
     pub path: ModPath,
 }
 
+#[derive(Clone, Debug)]
 pub struct Function {
     pub ident: ast::Ident,
     pub unsafety: ast::Unsafety,
@@ -213,6 +216,7 @@ pub struct Function {
     pub path: ModPath,
 }
 
+#[derive(Clone, Debug)]
 pub struct Module {
     pub ident: Option<ast::Ident>,
     pub structs: Vec<Struct>,
@@ -247,13 +251,17 @@ impl Module {
     }
 }
 
+#[derive(Clone, Debug)]
 pub struct Trait {
-    pub unsafety: ast::Unsafety,
+    pub items: Vec<ast::TraitItem>,
     pub ident: ast::Ident,
+    pub unsafety: ast::Unsafety,
+    pub vis: ast::Visibility,
     pub attrs: Vec<ast::Attribute>,
     pub path: ModPath,
 }
 
+#[derive(Clone, Debug)]
 pub struct Enum {
     pub ident: ast::Ident,
     pub variants: Vec<ast::Variant>,
@@ -261,6 +269,7 @@ pub struct Enum {
     pub path: ModPath,
 }
 
+#[derive(Clone, Debug)]
 pub struct Variant {
     pub ident: ast::Ident,
     pub attrs: Vec<ast::Attribute>,
@@ -268,14 +277,17 @@ pub struct Variant {
     pub path: ModPath,
 }
 
+#[derive(Clone, Debug)]
 pub struct Constant {
     pub type_: ast::Ty,
     pub expr: ast::Expr,
     pub ident: ast::Ident,
+    pub vis: ast::Visibility,
     pub attrs: Vec<ast::Attribute>,
     pub path: ModPath,
 }
 
+#[derive(Clone, Debug)]
 pub struct Impl {
     pub unsafety: ast::Unsafety,
     //pub generics: ast::Generics,
@@ -285,12 +297,14 @@ pub struct Impl {
     pub attrs: Vec<ast::Attribute>,
 }
 
+#[derive(Clone, Debug)]
 pub struct DefaultImpl {
     pub unsafety: ast::Unsafety,
     pub trait_: ast::TraitRef,
     pub attrs: Vec<ast::Attribute>,
 }
 
+#[derive(Clone, Debug)]
 pub struct ImplItem {
 
 }
