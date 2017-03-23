@@ -85,7 +85,7 @@ struct Enum {
     variants: Vec<NewDocTemp_>,
 }
 
-#[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
 struct MethodSig {
     unsafety: Unsafety,
     constness: Constness,
@@ -100,12 +100,12 @@ pub struct Trait {
     // pub bounds: Vec<TyParamBound>,
 }
 
-#[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub struct TraitItem {
     node: TraitItemKind,
 }
 
-#[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub enum TraitItemKind {
     Const(String, Option<String>),
     Method(MethodSig),
@@ -113,15 +113,20 @@ pub enum TraitItemKind {
     Macro(String),
 }
 
-#[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
-enum Selector {
-    OnModule,
-    OnTrait,
-    OnStruct,
+impl TraitItemKind {
+    pub fn get_category_string(&self) -> &str {
+        match *self {
+            TraitItemKind::Const(..)  => &"const",
+            TraitItemKind::Method(..) => &"fn",
+            TraitItemKind::Type(..)   => &"type",
+            TraitItemKind::Macro(..)  => &"macro",
+        }
+    }
 }
 
-// There are redundant enums because we can't derive Serialize/Deserialize on ast's types.
-#[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
+// There are redundant enums because it isn't possible to derive
+// Serialize/Deserialize on ast's types.
+#[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub enum Unsafety {
     Unsafe,
     Normal,
@@ -136,7 +141,7 @@ impl Convert<Unsafety> for ast::Unsafety {
     }
 }
 
-#[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub enum Constness {
     Const,
     NotConst,
@@ -151,7 +156,7 @@ impl Convert<Constness> for ast::Constness {
     }
 }
 
-#[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub enum Visibility {
     Public,
     Private,
@@ -168,7 +173,7 @@ impl Convert<Visibility> for ast::Visibility{
     }
 }
 
-#[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub enum Abi {
     // Single platform ABIs
     Cdecl,
@@ -297,8 +302,48 @@ impl Convert<NewDocTemp_> for document::Function {
     }
 }
 
+impl Convert<HashMap<DocType, Vec<DocLink>>> for [document::TraitItem] {
+    fn convert(&self, context: &Context) -> HashMap<DocType, Vec<DocLink>> {
+        let mut consts = Vec::new();
+        let mut methods = Vec::new();
+        let mut types = Vec::new();
+        let mut macros = Vec::new();
+
+        for item in self {
+            match item.node {
+                ast::TraitItemKind::Const(..) => consts.push(item.clone()),
+                ast::TraitItemKind::Method(..) => methods.push(item.clone()),
+                ast::TraitItemKind::Type(..) => types.push(item.clone()),
+                ast::TraitItemKind::Macro(..) => macros.push(item.clone()),
+            }
+        }
+
+        let conv = |items: Vec<document::TraitItem>| {
+            items.iter().cloned().map(|item|
+                                      DocLink {
+                                          name: item.ident.convert(context),
+                                          path: item.path.clone(),
+                                      }
+            ).collect()
+        };
+
+        let consts_n = conv(consts);
+        let methods_n = conv(methods);
+        let types_n = conv(types);
+        let macros_n = conv(macros);
+
+        let mut links = HashMap::new();
+        links.insert(DocType::TraitItemConst, consts_n);
+        links.insert(DocType::TraitItemMethod, methods_n);
+        links.insert(DocType::TraitItemType, types_n);
+        links.insert(DocType::TraitItemMacro, macros_n);
+        links
+    }
+}
+
 impl Convert<NewDocTemp_> for document::Trait {
     fn convert(&self, context: &Context) -> NewDocTemp_ {
+
         NewDocTemp_ {
             name: self.ident.convert(context),
             attrs: self.attrs.convert(context),
@@ -309,18 +354,6 @@ impl Convert<NewDocTemp_> for document::Trait {
             }),
             links: self.items.convert(context),
         }
-    }
-}
-
-impl Convert<HashMap<DocType, Vec<ModPath>>> for [document::TraitItem] {
-    fn convert(&self, context: &Context) -> HashMap<DocType, Vec<ModPath>>  {
-        let mut links = Vec::new();
-        for item in self.iter() {
-            links.push(item.path.clone());
-        }
-        let mut map = HashMap::new();
-        map.insert(DocType::Trait, links);
-        map
     }
 }
 
@@ -449,7 +482,7 @@ pub struct NewDocTemp_ {
     visibility: Option<Visibility>,
     // source code reference
     // References to other documents
-    links: HashMap<DocType, Vec<ModPath>>,
+    links: HashMap<DocType, Vec<DocLink>>,
 }
 
 impl Display for NewDocTemp_ {
@@ -502,8 +535,11 @@ impl NewDocTemp_ {
             DocInnerData::ConstDoc(..) |
             DocInnerData::EnumDoc(..) |
             DocInnerData::TraitDoc(..) => {
-                format!("=== {}", self.mod_path)
+                format!("=== (in module {})", self.mod_path.parent().unwrap())
             },
+            DocInnerData::TraitItemDoc(..) => {
+                format!("=== From trait {}", self.mod_path.parent().unwrap())
+            }
             DocInnerData::ModuleDoc(ref mod_) => "".to_string(),
         }
     }
@@ -537,24 +573,53 @@ impl NewDocTemp_ {
             DocInnerData::TraitDoc(ref trait_) => {
                 format!("trait {} {{ /* fields omitted */ }}", self.name)
             },
+            DocInnerData::TraitItemDoc(ref item) => {
+                format!("{}", self.trait_item(item))
+            },
         };
         format!("{} {}", vis_string, header)
     }
 
     fn subitems(&self) -> String {
-        match self.inner_data {
-            DocInnerData::FnDoc(ref func) => "".to_string(),
-            DocInnerData::ModuleDoc(ref mod_) => "".to_string(),
-            DocInnerData::EnumDoc(ref enum_) => "".to_string(),
-            DocInnerData::StructDoc(ref struct_) => "".to_string(),
-            DocInnerData::ConstDoc(ref const_) => "".to_string(),
-            DocInnerData::TraitDoc(ref trait_) => {
-                let mut desc = String::from("==== Trait items\n");
-                let items = trait_.items.iter().map(|x| x.to_string() )
-                    .collect::<Vec<String>>().join("\n");
-                desc.push_str(&items);
-                desc
+        let categories = match self.inner_data {
+            DocInnerData::ModuleDoc(..) => {
+                vec![DocType::Function,
+                     DocType::Module,
+                     DocType::Enum,
+                     DocType::Struct,
+                     DocType::Trait,
+                     DocType::Const]
             },
+            DocInnerData::TraitDoc(..) => {
+                vec![DocType::TraitItemConst,
+                     DocType::TraitItemMethod,
+                     DocType::TraitItemType,
+                     DocType::TraitItemMacro]
+            },
+            DocInnerData::StructDoc(..) |
+            DocInnerData::EnumDoc(..) => {
+                vec![DocType::Function]
+            },
+            _  => vec![]
+        };
+
+        categories.iter().map(|c| self.subitems_in_category(c))
+            .filter(|c| c.is_some())
+            .map(|c| c.unwrap())
+            .collect::<Vec<String>>().join("\n\n")
+    }
+
+    fn subitems_in_category(&self, type_: &DocType) -> Option<String> {
+        if let Some(items) = self.links.get(type_) {
+            if items.len() > 0 {
+                let category_str = type_.to_string();
+                let items_str = items.iter().cloned().map(|i| i.name ).collect::<Vec<String>>().join("\n");
+                Some(format!("==== {}\n{}", category_str, items_str))
+            } else {
+                None
+            }
+        } else {
+            None
         }
     }
 
@@ -586,6 +651,13 @@ impl NewDocTemp_ {
     }
 }
 
+#[derive(Clone, Hash, Eq, PartialEq, Debug, Serialize, Deserialize)]
+struct DocLink
+{
+    name: String,
+    path: ModPath,
+}
+
 #[derive(Hash, Eq, PartialEq, Debug, Serialize, Deserialize)]
 enum DocType {
     Function,
@@ -593,7 +665,29 @@ enum DocType {
     Enum,
     Struct,
     Const,
-    Trait
+    Trait,
+    TraitItemConst,
+    TraitItemMethod,
+    TraitItemType,
+    TraitItemMacro,
+}
+
+impl Display for DocType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let name = match *self {
+            DocType::Function => "Functions",
+            DocType::Module => "Modules",
+            DocType::Enum => "Enums",
+            DocType::Struct => "Structs",
+            DocType::Const => "Constants",
+            DocType::Trait => "Traits",
+            DocType::TraitItemConst  => &"Associated Constants",
+            DocType::TraitItemMethod => &"Trait Methods",
+            DocType::TraitItemType   => &"Associated Types",
+            DocType::TraitItemMacro  => &"Macros",
+        };
+        write!(f, "{}", name)
+    }
 }
 
 /// Describes all possible types of documentation.
