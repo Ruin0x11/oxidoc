@@ -17,7 +17,7 @@ use convert::NewDocTemp_;
 pub struct StoreLoc<'a> {
     pub store: &'a Store,
     pub path: ModPath,
-}   
+}
 
 /// Gets the fully qualified output directory for the current module scope.
 pub fn get_full_dir(store_path: &PathBuf , scope: &ModPath) -> PathBuf {

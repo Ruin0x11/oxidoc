@@ -7,6 +7,7 @@ use std::fmt;
 use std::fmt::Display;
 use document::{ModPath};
 use convert::*;
+use convert::NewDocTemp_;
 
 mod errors {
     error_chain! {
