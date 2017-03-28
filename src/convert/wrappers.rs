@@ -2,6 +2,7 @@ use serde::ser::{Serialize};
 use serde::de::{Deserialize};
 
 use convert::doc_containers::*;
+use document::{self, ModPath};
 
 #[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub struct Generics {
@@ -72,7 +73,17 @@ pub enum Abi {
 
 #[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub struct Struct {
-    pub fields: DocRelatedItems,
+    pub fields: Vec<StructField>,
+}
+
+// TODO: Should these have their own documentation?
+#[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
+pub struct StructField {
+    pub ident: Option<String>,
+    pub vis: Visibility,
+    pub ty: String,
+    pub attrs: document::Attributes,
+    pub path: ModPath,
 }
 
 #[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]

@@ -127,10 +127,10 @@ impl Convert<Vec<NewDocTemp_>> for document::Module {
         docs.extend(self.traits.iter().map(|x| x.convert(context)));
         docs.extend(self.fns.iter().map(|x| x.convert(context)));
         docs.extend(self.mods.iter().flat_map(|x| x.convert(context)));
-        // structs
+        docs.extend(self.structs.iter().map(|x| x.convert(context)));
         // imports
         // unions
-        // enums
+        docs.extend(self.enums.iter().map(|x| x.convert(context)));
         // foreigns
         // typedefs
         // statics
@@ -297,18 +297,78 @@ impl Convert<NewDocTemp_> for document::Struct {
             name: self.ident.convert(context),
             attrs: self.attrs.convert(context),
             mod_path: self.path.clone(),
-            visibility: Some(Visibility::Inherited),
+            visibility: Some(self.vis.convert(context)),
             inner_data: StructDoc(Struct {
-                fields: HashMap::new(),//self.fields.clean(context),
+                fields: self.fields.convert(context),
             }),
-            links: HashMap::new(),
+            links: self.fields.convert(context),
         }
     }
 }
 
-impl Convert<DocRelatedItems> for [document::StructField] {
+impl Convert<DocRelatedItems> for [ast::StructField] {
     fn convert(&self, context: &Context) -> DocRelatedItems {
+        let mut fields = Vec::new();
+
+        for item in self {
+            if item.ident.is_none() {
+                continue;
+            }
+            let field = item.convert(context);
+            let field_link = DocLink {
+                // TODO: Display nicely, with signature
+                name: field.ident.unwrap(),
+                path: field.path.clone(),
+            };
+            fields.push(field_link);
+        }
         let mut links = HashMap::new();
+        links.insert(DocType::StructField, fields);
+        links
+    }
+}
+
+impl Convert<StructField> for ast::StructField {
+    fn convert(&self, context: &Context) -> StructField {
+        StructField {
+            ident: self.ident.convert(context),
+            vis: self.vis.convert(context),
+            ty: self.ty.convert(context),
+            attrs: self.attrs.convert(context),
+            path: ModPath::new(),
+        }
+    }
+}
+
+impl Convert<NewDocTemp_> for document::Enum {
+    fn convert(&self, context: &Context) -> NewDocTemp_ {
+        NewDocTemp_ {
+            name: self.ident.convert(context),
+            attrs: self.attrs.convert(context),
+            mod_path: self.path.clone(),
+            visibility: Some(Visibility::Inherited),
+            inner_data: EnumDoc(Enum {
+                variants: self.variants.convert(context),
+            }),
+            links: self.variants.convert(context),
+        }
+    }
+}
+
+impl Convert<DocRelatedItems> for [ast::Variant] {
+    fn convert(&self, context: &Context) -> DocRelatedItems {
+        let mut variants = Vec::new();
+
+        for item in self {
+            // TODO: These are just strings for now, instead of separate docs.
+            let variant_link = DocLink {
+                name: pprust::to_string(|s| s.print_variant(item)),
+                path: ModPath::new(),
+            };
+            variants.push(variant_link);
+        }
+        let mut links = HashMap::new();
+        links.insert(DocType::Variant, variants);
         links
     }
 }

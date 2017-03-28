@@ -205,6 +205,7 @@ pub struct StructField {
 #[derive(Clone, Debug)]
 pub struct Struct {
     pub ident: ast::Ident,
+    pub vis: ast::Visibility,
     pub fields: Vec<ast::StructField>,
     pub attrs: Vec<ast::Attribute>,
     pub path: ModPath,
@@ -279,6 +280,7 @@ pub struct TraitItem {
 #[derive(Clone, Debug)]
 pub struct Enum {
     pub ident: ast::Ident,
+    pub vis: ast::Visibility,
     pub variants: Vec<ast::Variant>,
     pub attrs: Vec<ast::Attribute>,
     pub path: ModPath,

@@ -44,6 +44,7 @@ impl<'a> OxidocVisitor<'a> {
                       generics: &ast::Generics) -> Enum {
         Enum {
             ident: item.ident,
+            vis: item.vis.clone(),
             variants: enum_def.variants.clone(),
             attrs: item.attrs.clone(),
             path: self.make_modpath(item.ident),
@@ -87,6 +88,7 @@ impl<'a> OxidocVisitor<'a> {
                     ast_generics: &ast::Generics) -> Struct {
         Struct {
             ident: item.ident,
+            vis: item.vis.clone(),
             fields: variant_data.fields().iter().cloned().collect(),
             attrs: item.attrs.clone(),
             path: self.make_modpath(item.ident),

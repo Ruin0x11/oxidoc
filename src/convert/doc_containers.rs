@@ -126,8 +126,11 @@ impl NewDocTemp_ {
         format!("{} {}", vis_string, header)
     }
 
+    // TODO: Better way for formatting the wrapped types, as pprust does.
     fn subitems(&self) -> String {
         let categories = match self.inner_data {
+            // NOTE: Any better way to just enumerate all DocType values? This
+            // violates OCP.
             DocInnerData::ModuleDoc(..) => {
                 vec![DocType::Function,
                      DocType::Module,
@@ -142,9 +145,12 @@ impl NewDocTemp_ {
                      DocType::TraitItemType,
                      DocType::TraitItemMacro]
             },
-            DocInnerData::StructDoc(..) |
+            DocInnerData::StructDoc(..) => {
+                vec![DocType::StructField]
+            },
             DocInnerData::EnumDoc(..) => {
-                vec![DocType::Function]
+                vec![DocType::Function,
+                     DocType::Variant]
             },
             _  => vec![]
         };
@@ -209,7 +215,9 @@ pub enum DocType {
     Function,
     Module,
     Enum,
+    Variant,
     Struct,
+    StructField,
     Const,
     Trait,
     TraitItemConst,
@@ -224,7 +232,9 @@ impl Display for DocType {
             DocType::Function => "Functions",
             DocType::Module => "Modules",
             DocType::Enum => "Enums",
+            DocType::Variant => "Variants",
             DocType::Struct => "Structs",
+            DocType::StructField => "Struct Fields",
             DocType::Const => "Constants",
             DocType::Trait => "Traits",
             DocType::TraitItemConst  => &"Associated Constants",
