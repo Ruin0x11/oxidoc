@@ -1,3 +1,5 @@
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 use syntax::abi;
@@ -17,19 +19,26 @@ use convert::Context;
 /// Does not implement "Visitor" since this design allows passing in found Items
 /// as arguments instead of maintaining a global stack of Items and looking at
 /// the last one found.
-pub struct OxidocVisitor<'a> {
+pub struct OxidocVisitor {
     pub current_scope: ModPath,
-    pub ctxt: &'a Context,
+    pub crate_info: CrateInfo,
     pub crate_module: Module,
+    pub impls_for_ty: HashMap<Ty, Vec<Impl>>,
 }
 
-impl<'a> OxidocVisitor<'a> {
-    pub fn new(ctxt: &'a Context) -> OxidocVisitor<'a> {
+impl OxidocVisitor {
+    pub fn new(crate_info: CrateInfo) -> OxidocVisitor {
         OxidocVisitor {
             crate_module: Module::new(None),
             current_scope: ModPath::new(),
-            ctxt: ctxt,
+            crate_info: crate_info,
+            impls_for_ty: HashMap::new(),
         }
+    }
+
+    fn add_impl(&mut self, imp: Impl) {
+        let ty = Ty::from(imp.for_.clone());
+        self.impls_for_ty.entry(ty).or_insert(Vec::new()).push(imp);
     }
 
     fn make_modpath(&self, ident: ast::Ident) -> ModPath {
@@ -39,7 +48,7 @@ impl<'a> OxidocVisitor<'a> {
         path
     }
 
-    fn visit_enum_def(&mut self, item: &ast::Item,
+    fn visit_enum_def(&self, item: &ast::Item,
                       enum_def: &ast::EnumDef,
                       generics: &ast::Generics) -> Enum {
         Enum {
@@ -72,10 +81,10 @@ impl<'a> OxidocVisitor<'a> {
     fn visit_const(&self, item: &ast::Item,
                    ast_ty: &ast::Ty,
                    ast_expr: &ast::Expr,
-                   ) -> Constant {
+    ) -> Constant {
         Constant {
             ident: item.ident,
-            type_: ast_ty.clone(),
+            type_: Ty::from(ast_ty.clone()),
             expr:  ast_expr.clone(),
             vis: item.vis.clone(),
             attrs: item.attrs.clone(),
@@ -122,12 +131,12 @@ impl<'a> OxidocVisitor<'a> {
                   ast_unsafety: ast::Unsafety,
                   ast_generics: &ast::Generics,
                   ast_trait_ref: &Option<ast::TraitRef>,
-                  ty: &ast::Ty,
+                  ast_ty: &ast::Ty,
                   items: &Vec<ast::ImplItem>) -> Impl {
         Impl {
             unsafety: ast_unsafety,
             trait_: ast_trait_ref.clone(),
-            for_: ty.clone(),
+            for_: Ty::from(ast_ty.clone()),
             items: items.clone(),
             attrs: item.attrs.clone(),
         }
@@ -143,10 +152,19 @@ impl<'a> OxidocVisitor<'a> {
         }
     }
 
+    fn visit_use(&self, item: &ast::Item, import: &ast::ViewPath) -> Import {
+        // TODO: This will take some work to resolve globbed imports from
+        // external crates.
+        Import {
+            path: import.clone(),
+        }
+    }
+
     fn visit_item(&mut self, item: &ast::Item, module: &mut Module) {
         match item.node {
             ast::ItemKind::Use(ref view_path) => {
-                // TODO: Resolve 'use'd paths
+                let i = self.visit_use(item, view_path);
+                module.imports.push(i);
             },
             ast::ItemKind::Const(ref ty, ref expr) => {
                 let c = self.visit_const(item, ty, expr);
@@ -197,7 +215,7 @@ impl<'a> OxidocVisitor<'a> {
                 let i = self.visit_impl(item, unsafety,
                                         generics, trait_ref,
                                         ty, items);
-                module.impls.push(i);
+                self.add_impl(i);
             },
             ast::ItemKind::Ty(ref ty, ref generics) => {
 
@@ -221,7 +239,7 @@ impl<'a> OxidocVisitor<'a> {
             self.current_scope.push_string(pprust::ident_to_string(name));
         }
         else {
-            self.current_scope.push_string(self.ctxt.crate_info.package.name.clone());
+            self.current_scope.push_string(self.crate_info.package.name.clone());
         }
 
         module.path = self.current_scope.clone();
@@ -275,12 +293,12 @@ mod tests {
             }
         };
 
-        let context = Context {
-            store_path: PathBuf::from("~/.cargo/registry/doc/test-0.1.0"),
-            crate_info: crate_info
-        };
+        let context = Context::new(
+            PathBuf::from("~/.cargo/registry/doc/test-0.1.0"),
+            crate_info.clone(),
+            HashMap::new());
 
-        let mut visitor = OxidocVisitor::new(&context);
+        let mut visitor = OxidocVisitor::new(crate_info);
         visitor.visit_crate(krate);
         Ok(visitor.crate_module)
     }

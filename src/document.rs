@@ -187,15 +187,6 @@ impl Attributes {
     }
 }
 
-#[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
-pub struct NodeId(u32);
-
-impl From<ast::NodeId> for NodeId {
-    fn from(id: ast::NodeId) -> NodeId {
-        NodeId(id.as_u32())
-    }
-}
-
 #[derive(Clone, Debug)]
 pub struct StructField {
     type_: ast::Ty,
@@ -228,6 +219,7 @@ pub struct Function {
 pub struct Module {
     pub ident: Option<ast::Ident>,
     pub vis: ast::Visibility,
+    pub imports: Vec<Import>,
     pub structs: Vec<Struct>,
     pub fns: Vec<Function>,
     pub mods: Vec<Module>,
@@ -239,6 +231,10 @@ pub struct Module {
     pub is_crate: bool,
     pub attrs: Vec<ast::Attribute>,
     pub path: ModPath,
+
+    /// A mapping from namespaces that are 'use'd within this module to the full
+    /// path they resolve to.
+    pub namespaces_to_paths: HashMap<ModPath, ModPath>,
 }
 
 impl Module {
@@ -247,6 +243,7 @@ impl Module {
             ident:      ident,
             vis:        ast::Visibility::Inherited,
             attrs:      Vec::new(),
+            imports:    Vec::new(),
             structs:    Vec::new(),
             fns:        Vec::new(),
             mods:       Vec::new(),
@@ -257,6 +254,7 @@ impl Module {
             def_traits: Vec::new(),
             is_crate:   false,
             path:       ModPath::new(),
+            namespaces_to_paths: HashMap::new(),
         }
     }
 }
@@ -296,7 +294,7 @@ pub struct Variant {
 
 #[derive(Clone, Debug)]
 pub struct Constant {
-    pub type_: ast::Ty,
+    pub type_: Ty,
     pub expr: ast::Expr,
     pub ident: ast::Ident,
     pub vis: ast::Visibility,
@@ -309,7 +307,7 @@ pub struct Impl {
     pub unsafety: ast::Unsafety,
     //pub generics: ast::Generics,
     pub trait_: Option<ast::TraitRef>,
-    pub for_: ast::Ty,
+    pub for_: Ty,
     pub items: Vec<ast::ImplItem>,
     pub attrs: Vec<ast::Attribute>,
 }
@@ -326,6 +324,35 @@ pub struct ImplItem {
 
 }
 
-pub struct Ty {
+#[derive(Clone, Debug)]
+pub struct Import {
+    pub path: ast::ViewPath,
+}
 
+// These structs have importance in the initial AST visit, because all impls for
+// types have to be resolved by conversion. There could be types whose
+// implementation lives in another module.
+
+#[derive(Hash, Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
+pub struct NodeId(u32);
+
+impl From<ast::NodeId> for NodeId {
+    fn from(id: ast::NodeId) -> NodeId {
+        NodeId(id.as_u32())
+    }
+}
+
+#[derive(Hash, Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
+pub struct Ty {
+    pub id: NodeId,
+    pub name: String,
+}
+
+impl From<ast::Ty> for Ty {
+    fn from(ty: ast::Ty) -> Self{
+        Ty {
+            id: NodeId::from(ty.id),
+            name: pprust::ty_to_string(&ty),
+        }
+    }
 }

@@ -129,14 +129,11 @@ fn generate_doc_cache(krate: ast::Crate, crate_info: CrateInfo) -> Result<Store>
     let crate_doc_path = get_crate_doc_path(&crate_info)
         .chain_err(|| format!("Unable to get crate doc path for crate: {}", &crate_info.package.name))?;
 
-    let context = Context {
-        store_path: crate_doc_path,
-        crate_info: crate_info,
-    };
 
     let store = {
-        let mut v = OxidocVisitor::new(&context);
+        let mut v = OxidocVisitor::new(crate_info.clone());
         v.visit_crate(krate);
+        let mut context = Context::new(crate_doc_path, crate_info, v.impls_for_ty.clone());
         v.convert(&context)
     };
 

@@ -2,7 +2,7 @@ use serde::ser::{Serialize};
 use serde::de::{Deserialize};
 
 use convert::doc_containers::*;
-use document::{self, ModPath};
+use document::{self, NodeId, ModPath};
 
 #[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub struct Generics {
@@ -81,7 +81,7 @@ pub struct Struct {
 pub struct StructField {
     pub ident: Option<String>,
     pub vis: Visibility,
-    pub ty: String,
+    pub ty: document::Ty,
     pub attrs: document::Attributes,
     pub path: ModPath,
 }
@@ -93,7 +93,7 @@ pub struct Module {
 
 #[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub struct Constant {
-    pub type_: String,
+    pub ty: document::Ty,
     pub expr: String,
 }
 
@@ -120,9 +120,9 @@ pub struct TraitItem {
 
 #[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub enum TraitItemKind {
-    Const(String, Option<String>),
+    Const(document::Ty, Option<String>),
     Method(MethodSig),
-    Type(Option<String>),
+    Type(Option<document::Ty>),
     Macro(String),
 }
 

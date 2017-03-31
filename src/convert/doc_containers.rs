@@ -114,7 +114,7 @@ impl NewDocTemp_ {
                 format!("struct {} {{ /* fields omitted */ }}", self.name)
             },
             DocInnerData::ConstDoc(ref const_) => {
-                format!("const {}: {} = {}", self.name, const_.type_, const_.expr)
+                format!("const {}: {} = {}", self.name, const_.ty.name, const_.expr)
             },
             DocInnerData::TraitDoc(ref trait_) => {
                 format!("trait {} {{ /* fields omitted */ }}", self.name)
@@ -182,14 +182,14 @@ impl NewDocTemp_ {
                     Some(ref e) => e.clone(),
                     None    => "".to_string(),
                 };
-                format!("const {}: {} = {}", self.name, ty, expr_string)
+                format!("const {}: {} = {}", self.name, ty.name, expr_string)
             },
             TraitItemKind::Method(ref sig) => {
                 format!("fn {} {}", self.name, sig.header)
             },
             TraitItemKind::Type(ref ty) => {
                 let ty_string = match *ty {
-                    Some(ref t) => t.clone(),
+                    Some(ref t) => t.name.clone(),
                     None    => "".to_string(),
                 };
                 format!("type {}", ty_string)
@@ -262,7 +262,7 @@ pub enum DocInnerData {
 }
 
 impl DocInnerData {
-    fn get_doc_file_prefix(&self) -> String {
+    fn get_doc_file_prefix(&self) -> &str {
         match *self {
             DocInnerData::ModuleDoc(..) => "mdesc-",
             DocInnerData::EnumDoc(..)   => "edesc-",
@@ -270,7 +270,7 @@ impl DocInnerData {
             DocInnerData::ConstDoc(..)  => "cdesc-",
             DocInnerData::TraitDoc(..)  => "tdesc-",
             DocInnerData::FnDoc(..) |
-            _             => "",
-        }.to_string()
+            DocInnerData::TraitItemDoc(..) => "",
+        }
     }
 }

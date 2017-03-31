@@ -17,16 +17,32 @@ use syntax::ast;
 use syntax::print::pprust;
 use syntax::ptr::P;
 
-use document::{self, Attributes, CrateInfo, PathSegment, ModPath};
+use document::{self, NodeId, Impl, Ty, Attributes, CrateInfo, PathSegment, ModPath};
 use store::Store;
 use visitor::OxidocVisitor;
 
 use convert::wrappers::*;
 use convert::doc_containers::*;
 
+#[derive(Clone)]
 pub struct Context {
     pub store_path: PathBuf,
     pub crate_info: CrateInfo,
+    /// Mapping from types to their implementations. Received from the AST
+    /// visitor.
+    pub impls_for_ty: HashMap<Ty, Vec<Impl>>,
+}
+
+impl Context {
+    pub fn new(store_path: PathBuf,
+               crate_info: CrateInfo,
+               impls_for_ty: HashMap<Ty, Vec<Impl>>) -> Self {
+        Context {
+            store_path: store_path,
+            crate_info: crate_info,
+            impls_for_ty: impls_for_ty,
+        }
+    }
 }
 
 pub trait Convert<T> {
@@ -102,7 +118,7 @@ impl Convert<Abi> for abi::Abi {
     }
 }
 
-impl<'a> Convert<Store> for OxidocVisitor<'a> {
+impl Convert<Store> for OxidocVisitor {
     fn convert(&self, context: &Context) -> Store {
         debug!("Converting store");
         let mut store = Store::new(context.store_path.clone());
@@ -123,19 +139,20 @@ impl Convert<Vec<NewDocTemp_>> for document::Module {
     fn convert(&self, context: &Context) -> Vec<NewDocTemp_> {
         let mut docs: Vec<NewDocTemp_> = vec![];
 
+        // for import in self.imports.iter() {
+        //     add_import(&mut context, import);
+        // }
+
         docs.extend(self.consts.iter().map(|x| x.convert(context)));
         docs.extend(self.traits.iter().map(|x| x.convert(context)));
         docs.extend(self.fns.iter().map(|x| x.convert(context)));
         docs.extend(self.mods.iter().flat_map(|x| x.convert(context)));
         docs.extend(self.structs.iter().map(|x| x.convert(context)));
-        // imports
         // unions
         docs.extend(self.enums.iter().map(|x| x.convert(context)));
         // foreigns
         // typedefs
         // statics
-        // traits
-        // impls
         // macros
         // def_traits
 
@@ -157,6 +174,14 @@ impl Convert<Vec<NewDocTemp_>> for document::Module {
 
         docs.push(mod_doc);
 
+        for doc in &docs {
+            println!("Path: {}", doc.mod_path);
+        }
+
+        for imp in context.impls_for_ty.iter() {
+            println!("Impl: {:?}", imp);
+        }
+
         docs
     }
 }
@@ -169,7 +194,7 @@ impl Convert<NewDocTemp_> for document::Constant {
             mod_path: self.path.clone(),
             visibility: Some(self.vis.convert(context)),
             inner_data: ConstDoc(Constant {
-                type_: self.type_.convert(context),
+                ty: self.type_.clone(),
                 expr: self.expr.convert(context),
             }),
             links: HashMap::new(),
@@ -209,7 +234,6 @@ impl Convert<MethodSig> for ast::MethodSig {
 
 impl Convert<NewDocTemp_> for document::Trait {
     fn convert(&self, context: &Context) -> NewDocTemp_ {
-
         NewDocTemp_ {
             name: self.ident.convert(context),
             attrs: self.attrs.convert(context),
@@ -355,6 +379,12 @@ impl Convert<NewDocTemp_> for document::Enum {
     }
 }
 
+impl Convert<Ty> for ast::Ty {
+    fn convert(&self, context: &Context) -> Ty {
+        Ty::from(self.clone())
+    }
+}
+
 impl Convert<DocRelatedItems> for [ast::Variant] {
     fn convert(&self, context: &Context) -> DocRelatedItems {
         let mut variants = Vec::new();
@@ -376,12 +406,6 @@ impl Convert<DocRelatedItems> for [ast::Variant] {
 impl Convert<String> for ast::FnDecl {
     fn convert(&self, context: &Context) -> String {
         pprust::to_string(|s| s.print_fn_args_and_ret(self))
-    }
-}
-
-impl Convert<String> for ast::Ty {
-    fn convert(&self, context: &Context) -> String {
-        pprust::ty_to_string(self)
     }
 }
 
