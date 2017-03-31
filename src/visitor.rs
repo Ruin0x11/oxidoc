@@ -23,7 +23,8 @@ pub struct OxidocVisitor {
     pub current_scope: ModPath,
     pub crate_info: CrateInfo,
     pub crate_module: Module,
-    pub impls_for_ty: HashMap<Ty, Vec<Impl>>,
+    pub name_for_ty: HashMap<NodeId, ast::Ident>,
+    pub impls_for_ty: HashMap<NodeId, Vec<Impl>>,
 }
 
 impl OxidocVisitor {
@@ -32,13 +33,14 @@ impl OxidocVisitor {
             crate_module: Module::new(None),
             current_scope: ModPath::new(),
             crate_info: crate_info,
+            name_for_ty: HashMap::new(),
             impls_for_ty: HashMap::new(),
         }
     }
 
     fn add_impl(&mut self, imp: Impl) {
         let ty = Ty::from(imp.for_.clone());
-        self.impls_for_ty.entry(ty).or_insert(Vec::new()).push(imp);
+        self.impls_for_ty.entry(ty.id).or_insert(Vec::new()).push(imp);
     }
 
     fn make_modpath(&self, ident: ast::Ident) -> ModPath {
@@ -60,7 +62,7 @@ impl OxidocVisitor {
         }
     }
 
-    fn visit_fn(&mut self, item: &ast::Item,
+    fn visit_fn(&self, item: &ast::Item,
                 fn_decl: &ast::FnDecl,
                 ast_unsafety: ast::Unsafety,
                 ast_constness: ast::Constness,
@@ -97,6 +99,7 @@ impl OxidocVisitor {
                     ast_generics: &ast::Generics) -> Struct {
         Struct {
             ident: item.ident,
+            id: NodeId::from(item.id),
             vis: item.vis.clone(),
             fields: variant_data.fields().iter().cloned().collect(),
             attrs: item.attrs.clone(),
@@ -139,6 +142,7 @@ impl OxidocVisitor {
             for_: Ty::from(ast_ty.clone()),
             items: items.clone(),
             attrs: item.attrs.clone(),
+            path: self.make_modpath(item.ident)
         }
     }
 

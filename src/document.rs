@@ -196,6 +196,7 @@ pub struct StructField {
 #[derive(Clone, Debug)]
 pub struct Struct {
     pub ident: ast::Ident,
+    pub id: NodeId,
     pub vis: ast::Visibility,
     pub fields: Vec<ast::StructField>,
     pub attrs: Vec<ast::Attribute>,
@@ -310,6 +311,7 @@ pub struct Impl {
     pub for_: Ty,
     pub items: Vec<ast::ImplItem>,
     pub attrs: Vec<ast::Attribute>,
+    pub path: ModPath,
 }
 
 #[derive(Clone, Debug)]

@@ -140,13 +140,17 @@ impl NewDocTemp_ {
                      DocType::Const]
             },
             DocInnerData::TraitDoc(..) => {
-                vec![DocType::TraitItemConst,
+                vec![DocType::AssocConst,
                      DocType::TraitItemMethod,
-                     DocType::TraitItemType,
-                     DocType::TraitItemMacro]
+                     DocType::AssocType,
+                     DocType::Macro]
             },
             DocInnerData::StructDoc(..) => {
-                vec![DocType::StructField]
+                vec![DocType::StructField,
+                     DocType::Function,
+                     DocType::AssocConst,
+                     DocType::AssocType,
+                     DocType::Macro]
             },
             DocInnerData::EnumDoc(..) => {
                 vec![DocType::Function,
@@ -220,10 +224,10 @@ pub enum DocType {
     StructField,
     Const,
     Trait,
-    TraitItemConst,
+    AssocConst,
     TraitItemMethod,
-    TraitItemType,
-    TraitItemMacro,
+    AssocType,
+    Macro,
 }
 
 impl Display for DocType {
@@ -237,10 +241,10 @@ impl Display for DocType {
             DocType::StructField => "Struct Fields",
             DocType::Const => "Constants",
             DocType::Trait => "Traits",
-            DocType::TraitItemConst  => &"Associated Constants",
+            DocType::AssocConst  => &"Associated Constants",
             DocType::TraitItemMethod => &"Trait Methods",
-            DocType::TraitItemType   => &"Associated Types",
-            DocType::TraitItemMacro  => &"Macros",
+            DocType::AssocType   => &"Associated Types",
+            DocType::Macro  => &"Macros",
         };
         write!(f, "{}", name)
     }

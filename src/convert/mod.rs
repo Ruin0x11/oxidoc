@@ -30,13 +30,13 @@ pub struct Context {
     pub crate_info: CrateInfo,
     /// Mapping from types to their implementations. Received from the AST
     /// visitor.
-    pub impls_for_ty: HashMap<Ty, Vec<Impl>>,
+    pub impls_for_ty: HashMap<NodeId, Vec<Impl>>,
 }
 
 impl Context {
     pub fn new(store_path: PathBuf,
                crate_info: CrateInfo,
-               impls_for_ty: HashMap<Ty, Vec<Impl>>) -> Self {
+               impls_for_ty: HashMap<NodeId, Vec<Impl>>) -> Self {
         Context {
             store_path: store_path,
             crate_info: crate_info,
@@ -178,10 +178,6 @@ impl Convert<Vec<NewDocTemp_>> for document::Module {
             println!("Path: {}", doc.mod_path);
         }
 
-        for imp in context.impls_for_ty.iter() {
-            println!("Impl: {:?}", imp);
-        }
-
         docs
     }
 }
@@ -288,10 +284,10 @@ impl Convert<DocRelatedItems> for [document::TraitItem] {
         };
 
         let mut links = HashMap::new();
-        links.insert(DocType::TraitItemConst, conv(consts));
+        links.insert(DocType::AssocConst, conv(consts));
         links.insert(DocType::TraitItemMethod, conv(methods));
-        links.insert(DocType::TraitItemType, conv(types));
-        links.insert(DocType::TraitItemMacro, conv(macros));
+        links.insert(DocType::AssocType, conv(types));
+        links.insert(DocType::Macro, conv(macros));
         links
     }
 }
@@ -317,6 +313,13 @@ impl Convert<TraitItemKind> for ast::TraitItemKind {
 
 impl Convert<NewDocTemp_> for document::Struct {
     fn convert(&self, context: &Context) -> NewDocTemp_ {
+        let mut links: DocRelatedItems = self.fields.convert(context);
+        if let Some(impls) = context.impls_for_ty.get(&self.id) {
+            for impl_ in impls {
+                links.extend(impl_.convert(context));
+            }
+        }
+
         NewDocTemp_ {
             name: self.ident.convert(context),
             attrs: self.attrs.convert(context),
@@ -325,8 +328,44 @@ impl Convert<NewDocTemp_> for document::Struct {
             inner_data: StructDoc(Struct {
                 fields: self.fields.convert(context),
             }),
-            links: self.fields.convert(context),
+            links: links,
         }
+    }
+}
+
+impl Convert<DocRelatedItems> for document::Impl {
+    fn convert(&self, context: &Context) -> DocRelatedItems {
+        let mut consts = Vec::new();
+        let mut methods = Vec::new();
+        let mut types = Vec::new();
+        let mut macros = Vec::new();
+        for item in &self.items {
+            match item.node {
+                ast::ImplItemKind::Const(..)  => consts.push(item.clone()),
+                ast::ImplItemKind::Method(..) => methods.push(item.clone()),
+                ast::ImplItemKind::Type(..)   => types.push(item.clone()),
+                ast::ImplItemKind::Macro(..)  => macros.push(item.clone()),
+            }
+        }
+
+        let conv = |items: Vec<ast::ImplItem>| {
+            items.iter().cloned().map(|item| {
+                let name = item.ident.convert(context);
+                DocLink {
+                    name: name.clone(),
+                    path: ModPath::join(&self.path.clone(),
+                                        &ModPath::from(name))
+                }
+            }
+            ).collect()
+        };
+
+        let mut links = HashMap::new();
+        links.insert(DocType::AssocConst, conv(consts));
+        links.insert(DocType::Function, conv(methods));
+        links.insert(DocType::AssocType, conv(types));
+        links.insert(DocType::Macro, conv(macros));
+        links
     }
 }
 
