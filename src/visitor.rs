@@ -6,6 +6,7 @@ use syntax::abi;
 use syntax::ast;
 use syntax::print::pprust;
 use syntax::parse::{self, ParseSess};
+use syntax::symbol::keywords;
 
 use document::*;
 
@@ -24,7 +25,7 @@ pub struct OxidocVisitor {
     pub crate_info: CrateInfo,
     pub crate_module: Module,
     pub name_for_ty: HashMap<NodeId, ast::Ident>,
-    pub impls_for_ty: HashMap<NodeId, Vec<Impl>>,
+    pub impls_for_ty: HashMap<ModPath, Vec<Impl>>,
 }
 
 impl OxidocVisitor {
@@ -38,17 +39,19 @@ impl OxidocVisitor {
         }
     }
 
-    fn add_impl(&mut self, imp: Impl) {
-        let ty = Ty::from(imp.for_.clone());
-        self.impls_for_ty.entry(ty.id).or_insert(Vec::new()).push(imp);
-    }
-
-    fn add_use(&self, module: &mut Module,
-               ident: &ast::Ident,
-               path: &ast::Path) {
-        let identifier = pprust::ident_to_string(*ident);
-        let namespace = ModPath::from(path.clone());
-        module.namespaces_to_paths.insert(identifier, namespace);
+    // FIXME: Impls can be found before their respective types are index. There
+    // is nothing that can be done about this except doing the impl association
+    // after visiting.
+    fn add_impl(&mut self, module: &Module, imp: Impl) {
+        if let ast::TyKind::Path(_, path) = imp.for_.node.clone() {
+            let namespaced_path = ModPath::from(path.clone());
+            println!("Impl path: {} module: {}", namespaced_path, module.path);
+            if let Some(full_path) = module.resolve_use(&namespaced_path) {
+                self.impls_for_ty.entry(full_path.clone()).or_insert(Vec::new()).push(imp);
+            } else {
+                println!("No type found for impl {}", namespaced_path);
+            }
+        }
     }
 
     fn make_modpath(&self, ident: ast::Ident) -> ModPath {
@@ -148,7 +151,7 @@ impl OxidocVisitor {
         Impl {
             unsafety: ast_unsafety,
             trait_: ast_trait_ref.clone(),
-            for_: Ty::from(ast_ty.clone()),
+            for_: ast_ty.clone(),
             items: items.clone(),
             attrs: item.attrs.clone(),
             path: self.make_modpath(item.ident)
@@ -172,20 +175,38 @@ impl OxidocVisitor {
         // external crates.
         match import.node {
             ast::ViewPath_::ViewPathSimple(ident, ref path) => {
-                self.add_use(module, &ident, path);
+                module.add_use(&ident, ModPath::from(path.clone()));
             },
             ast::ViewPath_::ViewPathGlob(ref path) => {
-                // FIXME: Get all the keywords for this namespace.
-                // rustdoc uses compilation data to resolve this, and we use...?
+                // FIXME: Get all the keywords for this namespace. One would
+                // have to look into stores of dependencies that are already
+                // saved and get the list of namespaces there.
+                //
+                // I couldn't make this function pure, and therefore testable,
+                // because this case would have to return something.
             },
             ast::ViewPath_::ViewPathList(ref path, ref items) => {
                 for item in items {
-                    match item.node.rename {
-                        // FIXME: Append the ident to the path. It isn't there
-                        // already in this case (contrary to ViewPathSimple).
-                        Some(ren) => self.add_use(module, &ren, path),
-                        None      => self.add_use(module, &item.node.name, path),
-                    }
+                    // Unlike ViewPathSimple, the path does not contain each
+                    // ident at the end, so it must be added.
+                    let ident = match item.node.rename {
+                        Some(ren) => ren,
+                        None      => item.node.name,
+                    };
+
+                    let full_path = if ident == keywords::Super.ident() {
+                        ModPath::from(path.clone()).parent()
+                            .expect("Tried importing 'super' of crate root!")
+                    } else if ident == keywords::SelfValue.ident() {
+                        ModPath::from(path.clone())
+                    } else if ident == keywords::CrateRoot.ident() {
+                        unreachable!("It should be impossible to import the crate root!")
+                    } else {
+                        ModPath::join(&ModPath::from(path.clone()),
+                                      &ModPath::from(ident))
+                    };
+
+                    module.add_use(&ident, full_path);
                 }
             }
         }
@@ -245,7 +266,7 @@ impl OxidocVisitor {
                 let i = self.visit_impl(item, unsafety,
                                         generics, trait_ref,
                                         ty, items);
-                self.add_impl(i);
+                self.add_impl(module, i);
             },
             ast::ItemKind::Ty(..) |
             ast::ItemKind::Static(..) |
@@ -263,12 +284,13 @@ impl OxidocVisitor {
 
         if let Some(name) = mod_name {
             self.current_scope.push_string(pprust::ident_to_string(name));
-        }
-        else {
-            self.current_scope.push_string(self.crate_info.package.name.clone());
+        } else {
+            self.current_scope.push_string(pprust::ident_to_string(keywords::CrateRoot.ident()));
         }
 
         module.path = self.current_scope.clone();
+
+        // FIXME: add module path to be resolved to
 
         debug!("path: {}", self.current_scope);
 

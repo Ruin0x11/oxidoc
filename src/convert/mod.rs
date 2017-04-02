@@ -8,21 +8,17 @@ pub use convert::doc_containers::*;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::fmt::{self, Display};
 
-use serde::ser::{Serialize};
-use serde::de::{Deserialize};
 use syntax::abi;
 use syntax::ast;
 use syntax::print::pprust;
 use syntax::ptr::P;
 
-use document::{self, NodeId, Impl, Ty, Attributes, CrateInfo, PathSegment, ModPath};
+use document::{self, NodeId, Impl, Ty, Attributes, CrateInfo, ModPath};
 use store::Store;
 use visitor::OxidocVisitor;
 
 use convert::wrappers::*;
-use convert::doc_containers::*;
 
 #[derive(Clone)]
 pub struct Context {
@@ -30,13 +26,13 @@ pub struct Context {
     pub crate_info: CrateInfo,
     /// Mapping from types to their implementations. Received from the AST
     /// visitor.
-    pub impls_for_ty: HashMap<NodeId, Vec<Impl>>,
+    pub impls_for_ty: HashMap<ModPath, Vec<Impl>>,
 }
 
 impl Context {
     pub fn new(store_path: PathBuf,
                crate_info: CrateInfo,
-               impls_for_ty: HashMap<NodeId, Vec<Impl>>) -> Self {
+               impls_for_ty: HashMap<ModPath, Vec<Impl>>) -> Self {
         Context {
             store_path: store_path,
             crate_info: crate_info,
@@ -68,7 +64,7 @@ impl<T: Convert<U>, U> Convert<Option<U>> for Option<T> {
 }
 
 impl Convert<Unsafety> for ast::Unsafety {
-    fn convert(&self, context: &Context) -> Unsafety {
+    fn convert(&self, _context: &Context) -> Unsafety {
         match *self {
             ast::Unsafety::Normal => Unsafety::Normal,
             ast::Unsafety::Unsafe => Unsafety::Unsafe,
@@ -77,7 +73,7 @@ impl Convert<Unsafety> for ast::Unsafety {
 }
 
 impl Convert<Constness> for ast::Constness {
-    fn convert(&self, context: &Context) -> Constness {
+    fn convert(&self, _context: &Context) -> Constness {
         match *self {
             ast::Constness::Const    => Constness::Const,
             ast::Constness::NotConst => Constness::NotConst,
@@ -86,7 +82,7 @@ impl Convert<Constness> for ast::Constness {
 }
 
 impl Convert<Visibility> for ast::Visibility{
-    fn convert(&self, context: &Context) -> Visibility {
+    fn convert(&self, _context: &Context) -> Visibility {
         match *self {
             ast::Visibility::Public    => Visibility::Public,
             ast::Visibility::Inherited => Visibility::Inherited,
@@ -96,7 +92,7 @@ impl Convert<Visibility> for ast::Visibility{
 }
 
 impl Convert<Abi> for abi::Abi {
-    fn convert(&self, context: &Context) -> Abi {
+    fn convert(&self, _context: &Context) -> Abi {
         match *self {
             abi::Abi::Cdecl             => Abi::Cdecl,
             abi::Abi::Stdcall           => Abi::Stdcall,
@@ -298,10 +294,10 @@ impl Convert<TraitItemKind> for ast::TraitItemKind {
             ast::TraitItemKind::Const(ref ty, ref expr) => {
                 TraitItemKind::Const(ty.convert(context), expr.convert(context))
             },
-            ast::TraitItemKind::Method(ref sig, ref block) => {
+            ast::TraitItemKind::Method(ref sig, ref _block) => {
                 TraitItemKind::Method(sig.convert(context))
             },
-            ast::TraitItemKind::Type(ref bounds, ref ty) => {
+            ast::TraitItemKind::Type(ref _bounds, ref ty) => {
                 TraitItemKind::Type(ty.convert(context))
             },
             ast::TraitItemKind::Macro(ref mac) => {
@@ -314,9 +310,15 @@ impl Convert<TraitItemKind> for ast::TraitItemKind {
 impl Convert<NewDocTemp_> for document::Struct {
     fn convert(&self, context: &Context) -> NewDocTemp_ {
         let mut links: DocRelatedItems = self.fields.convert(context);
-        if let Some(impls) = context.impls_for_ty.get(&self.id) {
+        println!("My: {:?}", self.path);
+        for (i, _) in context.impls_for_ty.iter() {
+            println!("Against: {:?}", i);
+        }
+        if let Some(impls) = context.impls_for_ty.get(&self.path) {
             for impl_ in impls {
-                links.extend(impl_.convert(context));
+                let impl_links = impl_.convert(context);
+                println!("Impl found! {:?}", impl_links);
+                links.extend(impl_links);
             }
         }
 
@@ -340,6 +342,7 @@ impl Convert<DocRelatedItems> for document::Impl {
         let mut types = Vec::new();
         let mut macros = Vec::new();
         for item in &self.items {
+            println!("Item: {:?}", item);
             match item.node {
                 ast::ImplItemKind::Const(..)  => consts.push(item.clone()),
                 ast::ImplItemKind::Method(..) => methods.push(item.clone()),
@@ -419,13 +422,13 @@ impl Convert<NewDocTemp_> for document::Enum {
 }
 
 impl Convert<Ty> for ast::Ty {
-    fn convert(&self, context: &Context) -> Ty {
+    fn convert(&self, _context: &Context) -> Ty {
         Ty::from(self.clone())
     }
 }
 
 impl Convert<DocRelatedItems> for [ast::Variant] {
-    fn convert(&self, context: &Context) -> DocRelatedItems {
+    fn convert(&self, _context: &Context) -> DocRelatedItems {
         let mut variants = Vec::new();
 
         for item in self {
@@ -443,37 +446,37 @@ impl Convert<DocRelatedItems> for [ast::Variant] {
 }
 
 impl Convert<String> for ast::FnDecl {
-    fn convert(&self, context: &Context) -> String {
+    fn convert(&self, _context: &Context) -> String {
         pprust::to_string(|s| s.print_fn_args_and_ret(self))
     }
 }
 
 impl Convert<String> for ast::Expr {
-    fn convert(&self, context: &Context) -> String {
+    fn convert(&self, _context: &Context) -> String {
         pprust::expr_to_string(self)
     }
 }
 
 impl Convert<String> for ast::Ident {
-    fn convert(&self, context: &Context) -> String {
+    fn convert(&self, _context: &Context) -> String {
         pprust::ident_to_string(*self)
     }
 }
 
 impl Convert<String> for ast::Name {
-    fn convert(&self, context: &Context) -> String {
+    fn convert(&self, _context: &Context) -> String {
         pprust::to_string(|s| s.print_name(*self))
     }
 }
 
 impl Convert<String> for ast::Mac {
-    fn convert(&self, context: &Context) -> String {
+    fn convert(&self, _context: &Context) -> String {
         pprust::mac_to_string(self)
     }
 }
 
 impl Convert<Attributes> for [ast::Attribute] {
-    fn convert(&self, context: &Context) -> Attributes {
+    fn convert(&self, _context: &Context) -> Attributes {
         Attributes::from_ast(self)
     }
 }

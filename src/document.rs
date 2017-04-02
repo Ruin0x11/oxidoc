@@ -1,9 +1,10 @@
 use std::fs::{File, create_dir_all};
 use std::io::{Read, Write};
 use std::collections::HashMap;
-use serde_json;
 use std::fmt::{self, Display};
 use std::path::PathBuf;
+
+use serde_json;
 use syntax::ast::{self, Name};
 use syntax::abi;
 use syntax::codemap::{Span};
@@ -77,6 +78,14 @@ impl ModPath {
     /// The final segment of the path.
     pub fn name(&self) -> Option<PathSegment> {
         if let Some(seg) = self.0.iter().last() {
+            Some(seg.clone())
+        } else {
+            None
+        }
+    }
+
+    pub fn head(&self) -> Option<PathSegment> {
+        if let Some(seg) = self.0.iter().next() {
             Some(seg.clone())
         } else {
             None
@@ -257,6 +266,30 @@ impl Module {
             path:       ModPath::new(),
             namespaces_to_paths: HashMap::new(),
         }
+
+    }
+
+    pub fn add_use(&mut self,
+               ident: &ast::Ident,
+               path: ModPath) {
+        let identifier = pprust::ident_to_string(*ident);
+        let namespace = ModPath::from(path.clone());
+        self.namespaces_to_paths.insert(identifier, namespace);
+    }
+
+    pub fn resolve_use(&self, namespaced_path: &ModPath) -> Option<ModPath> {
+        let ident = namespaced_path.head()
+            .expect("Given path was empty!").identifier;
+        println!("Finding {} using {}.", namespaced_path, ident);
+        println!("Imported:");
+        for (n, _) in self.namespaces_to_paths.iter() {
+            println!("{}", n);
+        }
+        println!("");
+        match self.namespaces_to_paths.get(&ident) {
+            Some(u) => Some(ModPath::join(&u.parent().expect("Found empty 'use' namespace in module!"), &namespaced_path)),
+            None    => None,
+        }
     }
 }
 
@@ -308,7 +341,7 @@ pub struct Impl {
     pub unsafety: ast::Unsafety,
     //pub generics: ast::Generics,
     pub trait_: Option<ast::TraitRef>,
-    pub for_: Ty,
+    pub for_: ast::Ty,
     pub items: Vec<ast::ImplItem>,
     pub attrs: Vec<ast::Attribute>,
     pub path: ModPath,
