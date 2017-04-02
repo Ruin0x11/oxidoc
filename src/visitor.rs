@@ -43,6 +43,14 @@ impl OxidocVisitor {
         self.impls_for_ty.entry(ty.id).or_insert(Vec::new()).push(imp);
     }
 
+    fn add_use(&self, module: &mut Module,
+               ident: &ast::Ident,
+               path: &ast::Path) {
+        let identifier = pprust::ident_to_string(*ident);
+        let namespace = ModPath::from(path.clone());
+        module.namespaces_to_paths.insert(identifier, namespace);
+    }
+
     fn make_modpath(&self, ident: ast::Ident) -> ModPath {
         let mut path = self.current_scope.clone();
         let name = pprust::ident_to_string(ident);
@@ -52,7 +60,7 @@ impl OxidocVisitor {
 
     fn visit_enum_def(&self, item: &ast::Item,
                       enum_def: &ast::EnumDef,
-                      generics: &ast::Generics) -> Enum {
+                      _generics: &ast::Generics) -> Enum {
         Enum {
             ident: item.ident,
             vis: item.vis.clone(),
@@ -67,7 +75,7 @@ impl OxidocVisitor {
                 ast_unsafety: ast::Unsafety,
                 ast_constness: ast::Constness,
                 ast_abi: abi::Abi,
-                generics: &ast::Generics) -> Function {
+                _generics: &ast::Generics) -> Function {
         Function {
             ident: item.ident,
             decl: fn_decl.clone(),
@@ -96,7 +104,8 @@ impl OxidocVisitor {
 
     fn visit_struct(&self, item: &ast::Item,
                     variant_data: &ast::VariantData,
-                    ast_generics: &ast::Generics) -> Struct {
+                    _ast_generics: &ast::Generics) -> Struct {
+        println!("struct: {:?}", item);
         Struct {
             ident: item.ident,
             id: NodeId::from(item.id),
@@ -110,7 +119,7 @@ impl OxidocVisitor {
 
     fn visit_trait(&self, item: &ast::Item,
                    ast_unsafety: ast::Unsafety,
-                   ast_generics: &ast::Generics,
+                   _ast_generics: &ast::Generics,
                    trait_items: &Vec<ast::TraitItem>) -> Trait {
         Trait {
             items: trait_items.iter().cloned().map(|ti| {
@@ -132,7 +141,7 @@ impl OxidocVisitor {
 
     fn visit_impl(&self, item: &ast::Item,
                   ast_unsafety: ast::Unsafety,
-                  ast_generics: &ast::Generics,
+                  _ast_generics: &ast::Generics,
                   ast_trait_ref: &Option<ast::TraitRef>,
                   ast_ty: &ast::Ty,
                   items: &Vec<ast::ImplItem>) -> Impl {
@@ -156,19 +165,36 @@ impl OxidocVisitor {
         }
     }
 
-    fn visit_use(&self, item: &ast::Item, import: &ast::ViewPath) -> Import {
+    fn add_uses(&self, module: &mut Module,
+                _item: &ast::Item,
+                import: &ast::ViewPath) {
         // TODO: This will take some work to resolve globbed imports from
         // external crates.
-        Import {
-            path: import.clone(),
+        match import.node {
+            ast::ViewPath_::ViewPathSimple(ident, ref path) => {
+                self.add_use(module, &ident, path);
+            },
+            ast::ViewPath_::ViewPathGlob(ref path) => {
+                // FIXME: Get all the keywords for this namespace.
+                // rustdoc uses compilation data to resolve this, and we use...?
+            },
+            ast::ViewPath_::ViewPathList(ref path, ref items) => {
+                for item in items {
+                    match item.node.rename {
+                        // FIXME: Append the ident to the path. It isn't there
+                        // already in this case (contrary to ViewPathSimple).
+                        Some(ren) => self.add_use(module, &ren, path),
+                        None      => self.add_use(module, &item.node.name, path),
+                    }
+                }
+            }
         }
     }
 
     fn visit_item(&mut self, item: &ast::Item, module: &mut Module) {
         match item.node {
             ast::ItemKind::Use(ref view_path) => {
-                let i = self.visit_use(item, view_path);
-                module.imports.push(i);
+                self.add_uses(module, item, view_path);
             },
             ast::ItemKind::Const(ref ty, ref expr) => {
                 let c = self.visit_const(item, ty, expr);
@@ -221,12 +247,8 @@ impl OxidocVisitor {
                                         ty, items);
                 self.add_impl(i);
             },
-            ast::ItemKind::Ty(ref ty, ref generics) => {
-
-            },
-            ast::ItemKind::Static(ref ty, mutability, ref expr) => {
-
-            },
+            ast::ItemKind::Ty(..) |
+            ast::ItemKind::Static(..) |
             ast::ItemKind::Mac(..) |
             ast::ItemKind::ExternCrate(..) |
             ast::ItemKind::ForeignMod(..) => (),

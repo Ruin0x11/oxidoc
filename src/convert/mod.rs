@@ -139,9 +139,9 @@ impl Convert<Vec<NewDocTemp_>> for document::Module {
     fn convert(&self, context: &Context) -> Vec<NewDocTemp_> {
         let mut docs: Vec<NewDocTemp_> = vec![];
 
-        // for import in self.imports.iter() {
-        //     add_import(&mut context, import);
-        // }
+        for (ident, path) in self.namespaces_to_paths.iter() {
+            println!("in {:?}, {} => {}", self.ident, ident, path);
+        }
 
         docs.extend(self.consts.iter().map(|x| x.convert(context)));
         docs.extend(self.traits.iter().map(|x| x.convert(context)));

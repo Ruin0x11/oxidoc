@@ -233,9 +233,9 @@ pub struct Module {
     pub attrs: Vec<ast::Attribute>,
     pub path: ModPath,
 
-    /// A mapping from namespaces that are 'use'd within this module to the full
-    /// path they resolve to.
-    pub namespaces_to_paths: HashMap<ModPath, ModPath>,
+    /// A mapping from identifers that are 'use'd within this module to the full
+    /// namespace they resolve to.
+    pub namespaces_to_paths: HashMap<String, ModPath>,
 }
 
 impl Module {
