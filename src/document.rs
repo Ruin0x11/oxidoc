@@ -280,11 +280,6 @@ impl Module {
     pub fn resolve_use(&self, namespaced_path: &ModPath) -> Option<ModPath> {
         let ident = namespaced_path.head()
             .expect("Given path was empty!").identifier;
-        println!("Finding {} using {}.", namespaced_path, ident);
-        println!("Imported:");
-        for (n, _) in self.namespaces_to_paths.iter() {
-            println!("{}", n);
-        }
         println!("");
         match self.namespaces_to_paths.get(&ident) {
             Some(u) => Some(ModPath::join(&u.parent().expect("Found empty 'use' namespace in module!"), &namespaced_path)),

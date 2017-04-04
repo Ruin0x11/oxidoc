@@ -170,10 +170,6 @@ impl Convert<Vec<NewDocTemp_>> for document::Module {
 
         docs.push(mod_doc);
 
-        for doc in &docs {
-            println!("Path: {}", doc.mod_path);
-        }
-
         docs
     }
 }
@@ -310,14 +306,10 @@ impl Convert<TraitItemKind> for ast::TraitItemKind {
 impl Convert<NewDocTemp_> for document::Struct {
     fn convert(&self, context: &Context) -> NewDocTemp_ {
         let mut links: DocRelatedItems = self.fields.convert(context);
-        println!("My: {:?}", self.path);
-        for (i, _) in context.impls_for_ty.iter() {
-            println!("Against: {:?}", i);
-        }
         if let Some(impls) = context.impls_for_ty.get(&self.path) {
             for impl_ in impls {
                 let impl_links = impl_.convert(context);
-                println!("Impl found! {:?}", impl_links);
+                println!("Impl found for {}!", self.path);
                 links.extend(impl_links);
             }
         }
@@ -342,7 +334,6 @@ impl Convert<DocRelatedItems> for document::Impl {
         let mut types = Vec::new();
         let mut macros = Vec::new();
         for item in &self.items {
-            println!("Item: {:?}", item);
             match item.node {
                 ast::ImplItemKind::Const(..)  => consts.push(item.clone()),
                 ast::ImplItemKind::Method(..) => methods.push(item.clone()),

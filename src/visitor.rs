@@ -39,13 +39,12 @@ impl OxidocVisitor {
         }
     }
 
-    // FIXME: Impls can be found before their respective types are index. There
-    // is nothing that can be done about this except doing the impl association
-    // after visiting.
+    // FIXME: Impls can be found before their respective types are indexed.
+    // There is nothing that can be done about this except doing the impl
+    // association after visiting.
     fn add_impl(&mut self, module: &Module, imp: Impl) {
         if let ast::TyKind::Path(_, path) = imp.for_.node.clone() {
             let namespaced_path = ModPath::from(path.clone());
-            println!("Impl path: {} module: {}", namespaced_path, module.path);
             if let Some(full_path) = module.resolve_use(&namespaced_path) {
                 self.impls_for_ty.entry(full_path.clone()).or_insert(Vec::new()).push(imp);
             } else {
@@ -108,7 +107,6 @@ impl OxidocVisitor {
     fn visit_struct(&self, item: &ast::Item,
                     variant_data: &ast::VariantData,
                     _ast_generics: &ast::Generics) -> Struct {
-        println!("struct: {:?}", item);
         Struct {
             ident: item.ident,
             id: NodeId::from(item.id),
@@ -191,21 +189,27 @@ impl OxidocVisitor {
                     // ident at the end, so it must be added.
                     let ident = match item.node.rename {
                         Some(ren) => ren,
-                        None      => item.node.name,
+                        None      => {
+                            if item.node.name == keywords::SelfValue.ident() {
+                                // 'self' means the final namespace part of the
+                                // path resolves to the global path.
+                                path.segments.last().unwrap().identifier
+                            } else {
+                                item.node.name
+                            }
+                        },
                     };
 
-                    let full_path = if ident == keywords::Super.ident() {
-                        ModPath::from(path.clone()).parent()
-                            .expect("Tried importing 'super' of crate root!")
-                    } else if ident == keywords::SelfValue.ident() {
+                    println!("SELF: {} {}", ident, path);
+                    let full_path = if path.segments.last().unwrap().identifier == ident {
+                        // This was originally the 'self' keyword, so
+                        // std::fmt::{self} becomes
+                        // path = std::fmt, ident = fmt
                         ModPath::from(path.clone())
-                    } else if ident == keywords::CrateRoot.ident() {
-                        unreachable!("It should be impossible to import the crate root!")
                     } else {
                         ModPath::join(&ModPath::from(path.clone()),
                                       &ModPath::from(ident))
                     };
-
                     module.add_use(&ident, full_path);
                 }
             }
@@ -236,12 +240,14 @@ impl OxidocVisitor {
             ast::ItemKind::Enum(ref def, ref generics) => {
                 let e = self.visit_enum_def(item,
                                             def, generics);
+                module.add_use(&item.ident, e.path.clone());
                 module.enums.push(e);
             },
             ast::ItemKind::Struct(ref variant_data, ref generics) => {
                 let s = self.visit_struct(item,
                                           variant_data,
                                           generics);
+                module.add_use(&item.ident, s.path.clone());
                 module.structs.push(s);
             },
             ast::ItemKind::Union(ref variant_data, ref generics) => {
@@ -253,7 +259,6 @@ impl OxidocVisitor {
                                          unsafety, generics,
                                          trait_items);
                 module.traits.push(t);
-
             },
             ast::ItemKind::DefaultImpl(unsafety, ref trait_ref) => {
                 let def_trait = self.visit_default_impl(item, unsafety,
@@ -266,7 +271,7 @@ impl OxidocVisitor {
                 let i = self.visit_impl(item, unsafety,
                                         generics, trait_ref,
                                         ty, items);
-                self.add_impl(module, i);
+                module.impls.push(i);
             },
             ast::ItemKind::Ty(..) |
             ast::ItemKind::Static(..) |
@@ -296,6 +301,14 @@ impl OxidocVisitor {
 
         for item in &m.items {
             self.visit_item(item, &mut module);
+        }
+
+        // TODO: At this point, the items that could have impls will be added to
+        // module.namespaces_to_paths. All the impls will be in a vector. Map
+        // the impls.
+
+        while let Some(impl_) = module.impls.pop() {
+            self.add_impl(&mut module, impl_);
         }
 
         self.current_scope.pop();
