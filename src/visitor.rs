@@ -39,25 +39,62 @@ impl OxidocVisitor {
         }
     }
 
-    // FIXME: Impls can be found before their respective types are indexed.
-    // There is nothing that can be done about this except doing the impl
-    // association after visiting.
-    fn add_impl(&mut self, module: &Module, imp: Impl) {
+    fn visit_impl_const(&self, item: &ast::ImplItem, for_path: &ModPath, ty: &ast::Ty, expr: &ast::Expr) -> Constant {
+        Constant {
+            ident: item.ident,
+            type_: Ty::from(ty.clone()),
+            expr: expr.clone(),
+            vis: item.vis.clone(),
+            attrs: item.attrs.clone(),
+            path: for_path.append_ident(item.ident),
+        }
+    }
+
+    fn visit_impl_method(&self, item: &ast::ImplItem, for_path: &ModPath, sig: &ast::MethodSig) -> Function {
+        // In this case, the final segment of the ModPath is used as the type
+        // the item is implemented on.
+        Function {
+            ident: item.ident,
+            decl: (*sig.decl).clone(),
+            unsafety: sig.unsafety.clone(),
+            constness: sig.constness.node.clone(),
+            vis: item.vis.clone(),
+            abi: sig.abi.clone(),
+            attrs: item.attrs.clone(),
+            kind: FnKind::MethodFromImpl,
+            path: for_path.append_ident(item.ident),
+        }
+    }
+
+    fn visit_impl_item(&self, module: &mut Module, item: &ast::ImplItem, for_path: &ModPath) {
+        match item.node {
+            ast::ImplItemKind::Const(ref ty, ref expr) => {
+                let c = self.visit_impl_const(item, for_path, ty, expr);
+                module.consts.push(c);
+            },
+            ast::ImplItemKind::Method(ref sig, ref block) => {
+                let f = self.visit_impl_method(item, for_path, sig);
+                module.fns.push(f);
+            },
+            // TODO: Handle types and macros
+            ast::ImplItemKind::Type(ref ty) => (),
+            ast::ImplItemKind::Macro(ref mac) => (),
+        }
+    }
+
+    fn add_impl(&mut self, module: &mut Module, imp: Impl) {
         if let ast::TyKind::Path(_, path) = imp.for_.node.clone() {
             let namespaced_path = ModPath::from(path.clone());
             if let Some(full_path) = module.resolve_use(&namespaced_path) {
+                println!("Full path: {}", full_path);
+                for item in &imp.items {
+                    self.visit_impl_item(module, &item, &full_path);
+                }
                 self.impls_for_ty.entry(full_path.clone()).or_insert(Vec::new()).push(imp);
             } else {
                 println!("No type found for impl {}", namespaced_path);
             }
         }
-    }
-
-    fn make_modpath(&self, ident: ast::Ident) -> ModPath {
-        let mut path = self.current_scope.clone();
-        let name = pprust::ident_to_string(ident);
-        path.push_string(name);
-        path
     }
 
     fn visit_enum_def(&self, item: &ast::Item,
@@ -68,7 +105,7 @@ impl OxidocVisitor {
             vis: item.vis.clone(),
             variants: enum_def.variants.clone(),
             attrs: item.attrs.clone(),
-            path: self.make_modpath(item.ident),
+            path: self.current_scope.append_ident(item.ident),
         }
     }
 
@@ -86,7 +123,8 @@ impl OxidocVisitor {
             vis: item.vis.clone(),
             abi: ast_abi,
             attrs: item.attrs.clone(),
-            path: self.make_modpath(item.ident),
+            kind: FnKind::ItemFn,
+            path: self.current_scope.append_ident(item.ident),
         }
     }
 
@@ -100,7 +138,7 @@ impl OxidocVisitor {
             expr:  ast_expr.clone(),
             vis: item.vis.clone(),
             attrs: item.attrs.clone(),
-            path: self.make_modpath(item.ident),
+            path: self.current_scope.append_ident(item.ident),
         }
     }
 
@@ -113,7 +151,7 @@ impl OxidocVisitor {
             vis: item.vis.clone(),
             fields: variant_data.fields().iter().cloned().collect(),
             attrs: item.attrs.clone(),
-            path: self.make_modpath(item.ident),
+            path: self.current_scope.append_ident(item.ident),
         }
 
     }
@@ -127,7 +165,7 @@ impl OxidocVisitor {
                 TraitItem {
                     ident: ti.ident,
                     attrs: ti.attrs.clone(),
-                    path: ModPath::join(&self.make_modpath(item.ident),
+                    path: ModPath::join(&self.current_scope.append_ident(item.ident),
                                         &ModPath::from(ti.ident)),
                     node: ti.node,
                 }
@@ -136,7 +174,7 @@ impl OxidocVisitor {
             unsafety: ast_unsafety,
             vis: item.vis.clone(),
             attrs: item.attrs.clone(),
-            path: self.make_modpath(item.ident),
+            path: self.current_scope.append_ident(item.ident),
         }
     }
 
@@ -152,7 +190,7 @@ impl OxidocVisitor {
             for_: ast_ty.clone(),
             items: items.clone(),
             attrs: item.attrs.clone(),
-            path: self.make_modpath(item.ident)
+            path: self.current_scope.append_ident(item.ident)
         }
     }
 
@@ -200,7 +238,6 @@ impl OxidocVisitor {
                         },
                     };
 
-                    println!("SELF: {} {}", ident, path);
                     let full_path = if path.segments.last().unwrap().identifier == ident {
                         // This was originally the 'self' keyword, so
                         // std::fmt::{self} becomes
@@ -307,11 +344,11 @@ impl OxidocVisitor {
         // module.namespaces_to_paths. All the impls will be in a vector. Map
         // the impls.
 
+        self.current_scope.pop();
+
         while let Some(impl_) = module.impls.pop() {
             self.add_impl(&mut module, impl_);
         }
-
-        self.current_scope.pop();
 
         module
     }

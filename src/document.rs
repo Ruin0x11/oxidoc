@@ -14,10 +14,9 @@ use store::Store;
 
 use ::errors::*;
 
-#[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
+#[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
 pub enum FnKind {
     ItemFn,
-    Method,
     MethodFromImpl,
     MethodFromTrait,
 }
@@ -51,6 +50,14 @@ impl ModPath {
                 |seg| PathSegment { identifier: pprust::ident_to_string(seg.identifier) }).collect()
         )
     }
+
+    pub fn append_ident(&self, ident: ast::Ident) -> ModPath {
+        let mut path = self.clone();
+        let name = pprust::ident_to_string(ident);
+        path.push_string(name);
+        path
+    }
+
 
     pub fn push(&mut self, seg: PathSegment) {
         self.0.push(seg);
@@ -222,6 +229,7 @@ pub struct Function {
     pub vis: ast::Visibility,
     pub abi: abi::Abi,
     pub attrs: Vec<ast::Attribute>,
+    pub kind: FnKind,
     pub path: ModPath,
 }
 
@@ -347,11 +355,6 @@ pub struct DefaultImpl {
     pub unsafety: ast::Unsafety,
     pub trait_: ast::TraitRef,
     pub attrs: Vec<ast::Attribute>,
-}
-
-#[derive(Clone, Debug)]
-pub struct ImplItem {
-
 }
 
 #[derive(Clone, Debug)]

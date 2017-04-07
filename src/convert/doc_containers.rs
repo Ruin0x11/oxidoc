@@ -9,7 +9,7 @@ use syntax::ast;
 use syntax::print::pprust;
 use syntax::ptr::P;
 
-use document::{self, Attributes, CrateInfo, PathSegment, ModPath};
+use document::{self, FnKind, Attributes, CrateInfo, PathSegment, ModPath};
 use store::Store;
 use visitor::OxidocVisitor;
 
@@ -76,7 +76,12 @@ impl NewDocTemp_ {
 
     fn doc_info(&self) -> String {
         match self.inner_data {
-            DocInnerData::FnDoc(..) |
+            DocInnerData::FnDoc(ref func) => {
+                match func.kind {
+                    FnKind::MethodFromImpl => format!("=== Impl on type {}", self.mod_path.parent().unwrap()),
+                    _ => format!("=== In module {}", self.mod_path.parent().unwrap()),
+                }
+            },
             DocInnerData::StructDoc(..) |
             DocInnerData::ConstDoc(..) |
             DocInnerData::EnumDoc(..) |

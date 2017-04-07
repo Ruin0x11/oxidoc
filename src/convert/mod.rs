@@ -203,6 +203,7 @@ impl Convert<NewDocTemp_> for document::Function {
                 unsafety: self.unsafety.convert(context),
                 constness: self.constness.convert(context),
                 abi: self.abi.convert(context),
+                kind: self.kind.clone(),
             }),
             links: HashMap::new(),
         }

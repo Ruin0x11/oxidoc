@@ -104,6 +104,7 @@ pub struct Function {
     pub unsafety: Unsafety,
     pub constness: Constness,
     pub abi: Abi,
+    pub kind: document::FnKind,
 }
 
 #[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
