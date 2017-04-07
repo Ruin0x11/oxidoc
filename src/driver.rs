@@ -7,7 +7,7 @@ use std::fmt;
 use std::fmt::Display;
 use document::{ModPath};
 use convert::*;
-use convert::NewDocTemp_;
+use convert::Documentation;
 
 mod errors {
     error_chain! {
@@ -92,7 +92,7 @@ impl Driver {
         Ok(())
     }
 
-    fn load_docs_matching(&self, name: &ModPath) -> Result<Vec<NewDocTemp_>> {
+    fn load_docs_matching(&self, name: &ModPath) -> Result<Vec<Documentation>> {
         let mut found = Vec::new();
         for loc in self.stores_containing(name).unwrap() {
             let full_path = ModPath::join(&loc.path, name);

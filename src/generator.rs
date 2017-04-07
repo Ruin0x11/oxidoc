@@ -122,8 +122,6 @@ fn get_crate_doc_path(crate_info: &CrateInfo) -> Result<PathBuf> {
     Ok(path)
 }
 
-const asd: i32 = 1;
-
 /// Generates documentation for the given crate.
 fn generate_doc_cache(krate: ast::Crate, crate_info: CrateInfo) -> Result<Store> {
     let crate_doc_path = get_crate_doc_path(&crate_info)
@@ -137,10 +135,6 @@ fn generate_doc_cache(krate: ast::Crate, crate_info: CrateInfo) -> Result<Store>
     };
 
     println!("Documents: {}", store.documents.len());
-
-    for doc in &store.documents {
-        println!("{}", doc);
-    }
 
     Ok(store)
 }

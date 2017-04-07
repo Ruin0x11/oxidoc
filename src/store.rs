@@ -10,21 +10,7 @@ use std::io::{Read, Write};
 
 use ::errors::*;
 use document::*;
-use convert::NewDocTemp_;
-
-/// Defines an exact location a documentation file can be found.
-#[derive(Debug)]
-pub struct StoreLoc<'a> {
-    pub store: &'a Store,
-    pub path: ModPath,
-}
-
-/// Gets the fully qualified output directory for the current module scope.
-pub fn get_full_dir(store_path: &PathBuf , scope: &ModPath) -> PathBuf {
-    let rest = scope.parent().unwrap().to_string();
-
-    store_path.join(rest)
-}
+use convert::Documentation;
 
 type FunctionName = String;
 type StructName = String;
@@ -34,7 +20,7 @@ type StructName = String;
 pub struct Store {
     pub name: String,
     pub path: PathBuf,
-    pub documents: Vec<NewDocTemp_>,
+    pub documents: Vec<Documentation>,
 
     // Locations of documentation in the store
     modpaths: HashSet<ModPath>,
@@ -99,7 +85,7 @@ impl Store {
         }
     }
 
-    pub fn load_doc(&self, doc_path: &ModPath) -> Result<NewDocTemp_> {
+    pub fn load_doc(&self, doc_path: &ModPath) -> Result<Documentation> {
         info!("Store path: {}, Doc path: {}", &self.path.display(), &doc_path);
         bail!("asd")
     }

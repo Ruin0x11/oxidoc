@@ -131,9 +131,9 @@ impl Convert<Store> for OxidocVisitor {
     }
 }
 
-impl Convert<Vec<NewDocTemp_>> for document::Module {
-    fn convert(&self, context: &Context) -> Vec<NewDocTemp_> {
-        let mut docs: Vec<NewDocTemp_> = vec![];
+impl Convert<Vec<Documentation>> for document::Module {
+    fn convert(&self, context: &Context) -> Vec<Documentation> {
+        let mut docs: Vec<Documentation> = vec![];
 
         for (ident, path) in self.namespaces_to_paths.iter() {
             println!("in {:?}, {} => {}", self.ident, ident, path);
@@ -157,7 +157,7 @@ impl Convert<Vec<NewDocTemp_>> for document::Module {
             None     => context.crate_info.package.name.clone(),
         };
 
-        let mod_doc = NewDocTemp_ {
+        let mod_doc = Documentation {
             name: name.clone(),
             attrs: self.attrs.convert(context),
             mod_path: self.path.clone(),
@@ -174,9 +174,9 @@ impl Convert<Vec<NewDocTemp_>> for document::Module {
     }
 }
 
-impl Convert<NewDocTemp_> for document::Constant {
-    fn convert(&self, context: &Context) -> NewDocTemp_ {
-        NewDocTemp_ {
+impl Convert<Documentation> for document::Constant {
+    fn convert(&self, context: &Context) -> Documentation {
+        Documentation {
             name: self.ident.convert(context),
             attrs: self.attrs.convert(context),
             mod_path: self.path.clone(),
@@ -190,9 +190,9 @@ impl Convert<NewDocTemp_> for document::Constant {
     }
 }
 
-impl Convert<NewDocTemp_> for document::Function {
-    fn convert(&self, context: &Context) -> NewDocTemp_ {
-        NewDocTemp_ {
+impl Convert<Documentation> for document::Function {
+    fn convert(&self, context: &Context) -> Documentation {
+        Documentation {
             name: self.ident.convert(context),
             attrs: self.attrs.convert(context),
             mod_path: self.path.clone(),
@@ -221,9 +221,9 @@ impl Convert<MethodSig> for ast::MethodSig {
     }
 }
 
-impl Convert<NewDocTemp_> for document::Trait {
-    fn convert(&self, context: &Context) -> NewDocTemp_ {
-        NewDocTemp_ {
+impl Convert<Documentation> for document::Trait {
+    fn convert(&self, context: &Context) -> Documentation {
+        Documentation {
             name: self.ident.convert(context),
             attrs: self.attrs.convert(context),
             mod_path: self.path.clone(),
@@ -236,9 +236,9 @@ impl Convert<NewDocTemp_> for document::Trait {
     }
 }
 
-impl Convert<NewDocTemp_> for document::TraitItem {
-    fn convert(&self, context: &Context) -> NewDocTemp_ {
-        NewDocTemp_ {
+impl Convert<Documentation> for document::TraitItem {
+    fn convert(&self, context: &Context) -> Documentation {
+        Documentation {
             name: self.ident.convert(context),
             attrs: self.attrs.convert(context),
             mod_path: self.path.clone(),
@@ -304,8 +304,8 @@ impl Convert<TraitItemKind> for ast::TraitItemKind {
     }
 }
 
-impl Convert<NewDocTemp_> for document::Struct {
-    fn convert(&self, context: &Context) -> NewDocTemp_ {
+impl Convert<Documentation> for document::Struct {
+    fn convert(&self, context: &Context) -> Documentation {
         let mut links: DocRelatedItems = self.fields.convert(context);
         if let Some(impls) = context.impls_for_ty.get(&self.path) {
             for impl_ in impls {
@@ -315,7 +315,7 @@ impl Convert<NewDocTemp_> for document::Struct {
             }
         }
 
-        NewDocTemp_ {
+        Documentation {
             name: self.ident.convert(context),
             attrs: self.attrs.convert(context),
             mod_path: self.path.clone(),
@@ -398,9 +398,9 @@ impl Convert<StructField> for ast::StructField {
     }
 }
 
-impl Convert<NewDocTemp_> for document::Enum {
-    fn convert(&self, context: &Context) -> NewDocTemp_ {
-        NewDocTemp_ {
+impl Convert<Documentation> for document::Enum {
+    fn convert(&self, context: &Context) -> Documentation {
+        Documentation {
             name: self.ident.convert(context),
             attrs: self.attrs.convert(context),
             mod_path: self.path.clone(),

@@ -20,7 +20,7 @@ pub use self::DocInnerData::*;
 pub type DocRelatedItems = HashMap<DocType, Vec<DocLink>>;
 
 #[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
-pub struct NewDocTemp_ {
+pub struct Documentation {
     pub name: String,
     pub attrs: Attributes,
     pub mod_path: ModPath,
@@ -31,7 +31,7 @@ pub struct NewDocTemp_ {
     pub links: DocRelatedItems,
 }
 
-impl Display for NewDocTemp_ {
+impl Display for Documentation {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.render())
     }
@@ -50,7 +50,7 @@ impl Display for Visibility {
 impl DocInnerData {
 }
 
-impl NewDocTemp_ {
+impl Documentation {
     fn get_doc_filename(&self) -> String {
         let prefix = self.inner_data.get_doc_file_prefix();
         format!("{}{}.odoc", prefix, self.name)
