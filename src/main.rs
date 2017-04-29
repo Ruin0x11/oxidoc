@@ -1,26 +1,23 @@
-#[macro_use]
-extern crate clap;
-extern crate toml;
-extern crate syntex_syntax as syntax;
-extern crate serde;
-extern crate serde_json;
-#[macro_use]
-extern crate serde_derive;
-#[macro_use]
-extern crate error_chain;
-#[macro_use]
-extern crate log;
+#[macro_use] extern crate error_chain;
+#[macro_use] extern crate log;
+#[macro_use] extern crate serde_derive;
+#[macro_use] extern crate clap;
+extern crate bincode;
 extern crate env_logger;
 extern crate pager;
+extern crate serde;
+extern crate serde_json;
+extern crate syntex_syntax as syntax;
+extern crate toml;
 
+mod convert;
 mod document;
-mod generator;
 mod driver;
+mod generator;
+mod io_support;
 mod paths;
 mod store;
-mod io_support;
 mod visitor;
-mod convert;
 
 use std::path::PathBuf;
 use clap::{App, Arg};

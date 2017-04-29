@@ -4,7 +4,6 @@ use std::collections::HashMap;
 use std::fmt::{self, Display};
 use std::path::PathBuf;
 
-use serde_json;
 use syntax::ast::{self, Name};
 use syntax::abi;
 use syntax::codemap::{Span};
@@ -105,7 +104,7 @@ impl ModPath {
         result
     }
 
-    pub fn to_path(&self) -> PathBuf {
+    pub fn to_filepath(&self) -> PathBuf {
         PathBuf::from(self.0.iter().fold(String::new(), |res, s| res + &s.identifier.clone() + "/"))
     }
 }

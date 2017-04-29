@@ -3,8 +3,10 @@
 
 mod wrappers;
 mod doc_containers;
+mod storable;
 
 pub use convert::doc_containers::*;
+pub use convert::storable::*;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -14,7 +16,7 @@ use syntax::ast;
 use syntax::print::pprust;
 use syntax::ptr::P;
 
-use document::{self, NodeId, Impl, Ty, Attributes, CrateInfo, ModPath};
+use document::{self, Impl, Ty, Attributes, CrateInfo, ModPath};
 use store::Store;
 use visitor::OxidocVisitor;
 
@@ -133,11 +135,11 @@ impl Convert<Store> for OxidocVisitor {
 
 impl Convert<Vec<NewDocTemp_>> for document::Module {
     fn convert(&self, context: &Context) -> Vec<NewDocTemp_> {
-        let mut docs: Vec<NewDocTemp_> = vec![];
-
         for (ident, path) in self.namespaces_to_paths.iter() {
             println!("in {:?}, {} => {}", self.ident, ident, path);
         }
+
+        let mut docs: Vec<NewDocTemp_> = vec![];
 
         docs.extend(self.consts.iter().map(|x| x.convert(context)));
         docs.extend(self.traits.iter().map(|x| x.convert(context)));

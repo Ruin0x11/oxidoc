@@ -6,6 +6,7 @@ use serde::ser::{Serialize};
 use serde::de::{Deserialize};
 use syntax::abi;
 use syntax::ast;
+use syntax::symbol::keywords;
 use syntax::print::pprust;
 use syntax::ptr::P;
 
@@ -26,8 +27,7 @@ pub struct NewDocTemp_ {
     pub mod_path: ModPath,
     pub inner_data: DocInnerData,
     pub visibility: Option<Visibility>,
-    // source code reference
-    // References to other documents
+    // TODO: source code reference
     pub links: DocRelatedItems,
 }
 
@@ -209,6 +209,14 @@ impl NewDocTemp_ {
         };
         let doc = self.attrs.doc_strings.join("\n");
         format!("  {}\n{}", item_string, doc)
+    }
+
+    pub fn to_filepath(&self) -> PathBuf {
+        let mut path = self.mod_path.to_filepath();
+        path.push(self.get_doc_filename());
+        let prefix = PathBuf::from("{{root}}");
+        let stripped = path.strip_prefix(&prefix).unwrap();
+        stripped.to_path_buf()
     }
 }
 

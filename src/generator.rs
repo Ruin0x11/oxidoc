@@ -22,7 +22,7 @@ use syntax::symbol::{Symbol};
 
 use paths;
 use document::*;
-use convert::{Convert, Context};
+use convert::{Convert, Context, Storable};
 use visitor::OxidocVisitor;
 
 use ::errors::*;
@@ -60,7 +60,9 @@ pub fn generate_all() -> Result<()> {
         .chain_err(|| "Could not iterate cargo registry src directories")?
     {
         cache_doc_for_crate(&src_dir).
-            chain_err(|| format!("Unable to generate documentation for directory {}", &src_dir.display()))?;
+            chain_err(|| format!("Unable to generate documentation \
+                                  for directory {}",
+                                 &src_dir.display()))?;
     }
     Ok(())
 }
@@ -68,7 +70,9 @@ pub fn generate_all() -> Result<()> {
 
 pub fn generate(src_dir: PathBuf) -> Result<()> {
     cache_doc_for_crate(&src_dir).
-        chain_err(|| format!("Unable to generate documentation for directory {}", &src_dir.display()))?;
+        chain_err(|| format!("Unable to generate documentation \
+                              for directory {}",
+                             &src_dir.display()))?;
 
     Ok(())
 }
@@ -78,12 +82,15 @@ pub fn generate(src_dir: PathBuf) -> Result<()> {
 fn cache_doc_for_crate(crate_path: &PathBuf) -> Result<()> {
     let toml_path = crate_path.join("Cargo.toml");
 
-    let mut fp = File::open(&toml_path).chain_err(|| format!("Could not find Cargo.toml in path {}", toml_path.display()))?;
+    let mut fp = File::open(&toml_path)
+        .chain_err(|| format!("Could not find Cargo.toml in path {}",
+                              toml_path.display()))?;
 
     let ref mut contents = String::new();
     fp.read_to_string(contents).chain_err(|| "Failed to read from file")?;
 
-    let info: CrateInfo = toml::de::from_str(contents).chain_err(|| "Couldn't parse Cargo.toml")?;
+    let info: CrateInfo = toml::de::from_str(contents)
+        .chain_err(|| "Couldn't parse Cargo.toml")?;
 
     println!("Generating documentation for {}", &info);
 
@@ -95,7 +102,8 @@ fn cache_doc_for_crate(crate_path: &PathBuf) -> Result<()> {
         main_path = crate_path.join("src/main.rs");
         if!main_path.exists() {
             // TODO: Look for [lib] / [[bin]] targets here
-            println!("No crate entry point found (nonstandard paths are unsupported)");
+            println!("No crate entry point found \
+                      (nonstandard paths are unsupported)");
             return Ok(())
         }
     }
@@ -118,21 +126,24 @@ fn get_crate_doc_path(crate_info: &CrateInfo) -> Result<PathBuf> {
     }
 
     let path = home_dir.as_path().join(".cargo/registry/doc")
-        .join(format!("{}-{}", crate_info.package.name, crate_info.package.version));
+        .join(format!("{}-{}",
+                      crate_info.package.name,
+                      crate_info.package.version));
     Ok(path)
 }
-
-const asd: i32 = 1;
 
 /// Generates documentation for the given crate.
 fn generate_doc_cache(krate: ast::Crate, crate_info: CrateInfo) -> Result<Store> {
     let crate_doc_path = get_crate_doc_path(&crate_info)
-        .chain_err(|| format!("Unable to get crate doc path for crate: {}", &crate_info.package.name))?;
+        .chain_err(|| format!("Unable to get crate doc path for crate: {}",
+                              &crate_info.package.name))?;
 
     let store = {
         let mut v = OxidocVisitor::new(crate_info.clone());
         v.visit_crate(krate);
-        let mut context = Context::new(crate_doc_path, crate_info, v.impls_for_ty.clone());
+        let context = Context::new(crate_doc_path.clone(),
+                                       crate_info,
+                                       v.impls_for_ty.clone());
         v.convert(&context)
     };
 
@@ -140,6 +151,8 @@ fn generate_doc_cache(krate: ast::Crate, crate_info: CrateInfo) -> Result<Store>
 
     for doc in &store.documents {
         println!("{}", doc);
+        println!("{}", doc.to_filepath().display());
+        doc.save(&crate_doc_path).unwrap();
     }
 
     Ok(store)
