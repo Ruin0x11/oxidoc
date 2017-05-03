@@ -17,7 +17,7 @@ use syntax::print::pprust;
 use syntax::ptr::P;
 
 use document::{self, Impl, Ty, Attributes, CrateInfo, ModPath};
-use store::Store;
+use store::{Docset, Store};
 use visitor::OxidocVisitor;
 
 use convert::wrappers::*;
@@ -116,20 +116,16 @@ impl Convert<Abi> for abi::Abi {
     }
 }
 
-impl Convert<Store> for OxidocVisitor {
-    fn convert(&self, context: &Context) -> Store {
+impl Convert<Vec<NewDocTemp_>> for OxidocVisitor {
+    fn convert(&self, context: &Context) -> Vec<NewDocTemp_> {
         debug!("Converting store");
-        let mut store = Store::new(context.store_path.clone());
-
         let documents = self.crate_module.convert(context);
 
-        for doc in &store.documents {
+        for doc in &documents {
             debug!("{:?}", doc);
         }
 
-        store.documents = documents;
-
-        store
+        documents
     }
 }
 
@@ -156,7 +152,7 @@ impl Convert<Vec<NewDocTemp_>> for document::Module {
 
         let name = match self.ident {
             Some(id) => id.convert(context),
-            None     => context.crate_info.package.name.clone(),
+            None     => context.crate_info.name.clone(),
         };
 
         let mod_doc = NewDocTemp_ {

@@ -340,10 +340,6 @@ impl OxidocVisitor {
             self.visit_item(item, &mut module);
         }
 
-        // TODO: At this point, the items that could have impls will be added to
-        // module.namespaces_to_paths. All the impls will be in a vector. Map
-        // the impls.
-
         self.current_scope.pop();
 
         while let Some(impl_) = module.impls.pop() {
@@ -385,10 +381,8 @@ mod tests {
         let krate = parse_crate_from_source(source_code, parse_session)?;
 
         let crate_info = CrateInfo {
-            package: Package {
-                name: "test".to_string(),
-                version: "0.1.0".to_string(),
-            }
+            name: "test".to_string(),
+            version: "0.1.0".to_string(),
         };
 
         let context = Context::new(

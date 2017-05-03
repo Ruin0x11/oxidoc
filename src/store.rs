@@ -1,129 +1,107 @@
-use serde::ser::{Serialize};
-use serde::de::{Deserialize};
-use serde_json;
-use document::Documentable;
-
-use std::collections::{HashMap, HashSet};
-use std::path::{PathBuf};
-use std::fs::{self, File};
-use std::io::{Read, Write};
-
-use ::errors::*;
-use document::*;
 use convert::NewDocTemp_;
+use std::collections::HashMap;
+use std::fs::File;
+use std::io::{Read, Write};
+use std::path::{Path, PathBuf};
 
-/// Defines an exact location a documentation file can be found.
-#[derive(Debug)]
-pub struct StoreLoc<'a> {
-    pub store: &'a Store,
-    pub path: ModPath,
+use bincode::{self, Infinite};
+use serde::de::Deserialize;
+use serde::ser::Serialize;
+
+use convert::DocType;
+use document::CrateInfo;
+use document::ModPath;
+use ::errors::*;
+
+pub const CARGO_DOC_PATH: &str = ".cargo/registry/doc";
+
+pub fn read_bincode_data<S, T>(path: T) -> Result<S>
+    where S: Deserialize,
+          T: AsRef<Path>
+{
+    let path_as = path.as_ref();
+    let mut data: Vec<u8> = Vec::new();
+    let mut bincoded_file = File::open(path_as)
+        .chain_err(|| format!("No such file {}", path_as.display()))?;
+
+    bincoded_file.read_to_end(&mut data)
+        .chain_err(|| format!("Failed to read file {}", path_as.display()))?;
+    let result = bincode::deserialize(&data)
+        .chain_err(|| format!("Could not deserialize file at {}", path_as.display()))?;
+
+    Ok(result)
 }
 
-/// Gets the fully qualified output directory for the current module scope.
-pub fn get_full_dir(store_path: &PathBuf , scope: &ModPath) -> PathBuf {
-    let rest = scope.parent().unwrap().to_string();
+pub fn write_bincode_data<S, T>(data: S, path: T) -> Result<()>
+    where S: Serialize,
+          T: AsRef<Path>
+{
+    let path_as = path.as_ref();
 
-    store_path.join(rest)
+    let data = bincode::serialize(&data, Infinite)
+        .chain_err(|| format!("Could not deserialize file at {}", path_as.display()))?;
+
+    let mut bincoded_file = File::create(path_as)
+        .chain_err(|| format!("Failed to create file {}", path_as.display()))?;
+    bincoded_file.write(data.as_slice())
+        .chain_err(|| format!("Failed to write file {}", path_as.display()))?;
+
+    Ok(())
 }
 
-type FunctionName = String;
-type StructName = String;
-
-/// A set of Rustdoc documentation for a single crate.
-#[derive(Debug)]
+#[derive(Serialize, Deserialize)]
 pub struct Store {
-    pub name: String,
-    pub path: PathBuf,
-    pub documents: Vec<NewDocTemp_>,
-
-    // Locations of documentation in the store
-    modpaths: HashSet<ModPath>,
-    functions: HashMap<ModPath, HashSet<FunctionName>>,
-    structs: HashMap<ModPath, HashSet<StructName>>,
+    items: HashMap<CrateInfo, Docset>,
 }
 
 impl Store {
-    pub fn new(path: PathBuf) -> Store {
+    pub fn new() -> Self {
         Store {
-            name: "".to_string(),
-            path: path,
-            documents: Vec::new(),
-            modpaths: HashSet::new(),
-            functions: HashMap::new(),
-            structs: HashMap::new(),
+            items: HashMap::new(),
         }
     }
 
-    pub fn get_functions(&self, scope: &ModPath) -> Option<&HashSet<FunctionName>> {
-        self.functions.get(scope)
-    }
-
-    pub fn get_structs(&self, scope: &ModPath) -> Option<&HashSet<StructName>> {
-        self.structs.get(scope)
-    }
-
-    pub fn get_modpaths(&self) -> &HashSet<ModPath> {
-        for m in &self.modpaths {
-            info!("module: {}\n", m);
-        }
-        &self.modpaths
-    }
-
-    /// Load the cache for this store, which currently contains the names of all modules.
-    pub fn load_cache(&mut self) -> Result<()> {
-        let path = self.path.join("cache.odoc");
-
-        let mut fp = File::open(&path)
-            .chain_err(|| format!("Couldn't find oxidoc cache {}", &path.display()))?;
-
-        let mut json = String::new();
-        fp.read_to_string(&mut json)
-            .chain_err(|| format!("Couldn't read oxidoc cache {}", &path.display()))?;
-
-        info!("odoc: {}", &path.display());
-        let module_names: HashSet<ModPath> = serde_json::from_str(&json).unwrap();
-        self.modpaths = module_names;
-
-        Ok(())
-    }
-    /// Add a module's path to the list of known modules in this store.
-    pub fn add_modpath(&mut self, scope: ModPath) {
-        self.modpaths.insert(scope);
-    }
-
-    fn add_all_modpaths(&mut self, scope: &ModPath) {
-        let mut parent = scope.parent();
-        while let Some(path) = parent {
-            parent = path.parent();
-            self.modpaths.insert(path);
+    pub fn load() -> Self {
+        match Store::load_from_disk() {
+            Ok(store) => store,
+            Err(_)    => Store::new(),
         }
     }
 
-    pub fn load_doc(&self, doc_path: &ModPath) -> Result<NewDocTemp_> {
-        info!("Store path: {}, Doc path: {}", &self.path.display(), &doc_path);
-        bail!("asd")
-    }
-    /// Saves all documentation data that is in-memory to disk.
-    pub fn save(&self) -> Result<()> {
-        fs::create_dir_all(&self.path)
-            .chain_err(|| format!("Unable to create directory {}", &self.path.display()))?;
-
-        self.save_cache()
-            .chain_err(|| format!("Unable to save cache for directory {}", &self.path.display()))?;
-
-        // TODO: save the rest of documentation
-
-        Ok(())
+    pub fn save(&mut self) -> Result<()> {
+        write_bincode_data(self, PathBuf::from(format!("{}/cache.odoc", CARGO_DOC_PATH)))
     }
 
-    /// Saves this store's cached list of module names to disk.
-    pub fn save_cache(&self) -> Result<()> {
-        let json = serde_json::to_string(&self.modpaths).unwrap();
+    pub fn load_from_disk() -> Result<Self> {
+        read_bincode_data(PathBuf::from(format!("{}/cache.odoc", CARGO_DOC_PATH)))
+    }
 
-        let outfile = self.path.join("cache.odoc");
-        let mut fp = File::create(&outfile).chain_err(|| format!("Could not write cache file {}", outfile.display()))?;
-        fp.write_all(json.as_bytes()).chain_err(|| format!("Failed to write to function odoc file {}", outfile.display()))?;
+    pub fn add_docset(&mut self, crate_info: CrateInfo, docset: Docset) {
+        self.items.insert(crate_info, docset);
+    }
+}
 
+#[derive(Serialize, Deserialize)]
+pub struct Docset {
+    pub crate_info: CrateInfo,
+    pub documents: HashMap<DocType, Vec<ModPath>>,
+}
+
+impl Docset {
+    pub fn new(crate_info: CrateInfo) -> Self {
+        Docset {
+            crate_info: crate_info,
+            documents: HashMap::new(),
+        }
+    }
+
+    pub fn add_docs(&mut self, documents: Vec<NewDocTemp_>) -> Result<()> {
+        for doc in documents.into_iter() {
+            let entry = self.documents.entry(doc.get_type()).or_insert(Vec::new());
+            entry.push(doc.mod_path.clone());
+            doc.save(&self.crate_info)
+                .chain_err(|| format!("Could not add doc {} to docset", doc.mod_path))?;
+        }
         Ok(())
     }
 }

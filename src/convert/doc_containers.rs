@@ -2,19 +2,14 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::fmt::{self, Display};
 
-use serde::ser::{Serialize};
-use serde::de::{Deserialize};
-use syntax::abi;
-use syntax::ast;
-use syntax::symbol::keywords;
-use syntax::print::pprust;
-use syntax::ptr::P;
+use bincode::{self, Infinite};
 
-use document::{self, FnKind, Attributes, CrateInfo, PathSegment, ModPath};
-use store::Store;
-use visitor::OxidocVisitor;
+use document::{FnKind, Attributes, CrateInfo, ModPath};
+use store;
 
 use convert::wrappers::*;
+use convert::wrappers::TraitItemKind;
+use ::errors::*;
 
 pub use self::DocInnerData::*;
 
@@ -91,12 +86,44 @@ impl NewDocTemp_ {
             DocInnerData::TraitItemDoc(..) => {
                 format!("=== From trait {}", self.mod_path.parent().unwrap())
             }
-            DocInnerData::ModuleDoc(ref mod_) => "".to_string(),
+            DocInnerData::ModuleDoc(..) => "".to_string(),
         }
     }
 
     fn docstring(&self) -> String {
         self.attrs.doc_strings.join("\n")
+    }
+
+    pub fn get_type(&self) -> DocType {
+        match self.inner_data {
+            DocInnerData::FnDoc(..) => {
+                DocType::Function
+            },
+            DocInnerData::ModuleDoc(..) => {
+                DocType::Module
+            },
+            DocInnerData::EnumDoc(..) => {
+                DocType::Enum
+            },
+            DocInnerData::StructDoc(..) => {
+                DocType::Struct
+            },
+            DocInnerData::ConstDoc(..) => {
+                DocType::Const
+            },
+            DocInnerData::TraitDoc(..) => {
+                DocType::Trait
+            },
+            DocInnerData::TraitItemDoc(ref item) => {
+                    match item.node {
+                        TraitItemKind::Const(..)  => DocType::TraitItemConst,
+                        TraitItemKind::Method(..) => DocType::TraitItemMethod,
+                        TraitItemKind::Type(..)   => DocType::TraitItemType,
+                        TraitItemKind::Macro(..)  => DocType::TraitItemMacro,
+                    }
+            },
+            
+        }
     }
 
     fn inner_data(&self) -> String {
@@ -218,6 +245,15 @@ impl NewDocTemp_ {
         let stripped = path.strip_prefix(&prefix).unwrap();
         stripped.to_path_buf()
     }
+
+    pub fn save(&self, crate_info: &CrateInfo) -> Result<()> {
+        let mut path = crate_info.to_path_prefix();
+        path.push(self.to_filepath());
+
+        let data = bincode::serialize(self, Infinite)
+            .chain_err(|| format!("Could not serialize doc {}", self.mod_path))?;
+        store::write_bincode_data(data, path)
+    }
 }
 
 #[derive(Clone, Hash, Eq, PartialEq, Debug, Serialize, Deserialize)]
@@ -239,6 +275,9 @@ pub enum DocType {
     Trait,
     AssocConst,
     TraitItemMethod,
+    TraitItemConst,
+    TraitItemType,
+    TraitItemMacro,
     AssocType,
     Macro,
 }
@@ -255,7 +294,10 @@ impl Display for DocType {
             DocType::Const => "Constants",
             DocType::Trait => "Traits",
             DocType::AssocConst  => &"Associated Constants",
+            DocType::TraitItemConst => &"Trait Constants",
             DocType::TraitItemMethod => &"Trait Methods",
+            DocType::TraitItemType => &"Trait Types",
+            DocType::TraitItemMacro => &"Trait Macros",
             DocType::AssocType   => &"Associated Types",
             DocType::Macro  => &"Macros",
         };

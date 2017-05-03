@@ -136,21 +136,21 @@ impl Display for ModPath {
 }
 
 /// Holds the name and version of crate for generating doc directory name
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Package {
+#[derive(Clone, Debug, Serialize, Deserialize, Hash, Eq, PartialEq)]
+pub struct CrateInfo {
     pub name: String,
     pub version: String,
 }
 
-/// Holds the TOML fields we care about when deserializing
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct CrateInfo {
-    pub package: Package,
+impl CrateInfo {
+    pub fn to_path_prefix(&self) -> PathBuf {
+        PathBuf::from(format!("{}-{}", self.name, self.version))
+    }
 }
 
 impl Display for CrateInfo {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}-{}", self.package.name, self.package.version)
+        write!(f, "{}-{}", self.name, self.version)
     }
 }
 

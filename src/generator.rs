@@ -23,6 +23,7 @@ use syntax::symbol::{Symbol};
 use paths;
 use document::*;
 use convert::{Convert, Context, Storable};
+use store::Docset;
 use visitor::OxidocVisitor;
 
 use ::errors::*;
@@ -100,7 +101,7 @@ fn cache_doc_for_crate(crate_path: &PathBuf) -> Result<()> {
     let mut main_path = crate_path.join("src/lib.rs");
     if !main_path.exists() {
         main_path = crate_path.join("src/main.rs");
-        if!main_path.exists() {
+        if !main_path.exists() {
             // TODO: Look for [lib] / [[bin]] targets here
             println!("No crate entry point found \
                       (nonstandard paths are unsupported)");
@@ -109,7 +110,7 @@ fn cache_doc_for_crate(crate_path: &PathBuf) -> Result<()> {
     }
     let krate = parse(main_path.as_path(), &parse_session).unwrap();
 
-    let store = generate_doc_cache(krate, info)
+    let mut store = generate_doc_cache(krate, info)
         .chain_err(|| "Failed to generate doc cache")?;
 
     store.save()
@@ -127,8 +128,8 @@ fn get_crate_doc_path(crate_info: &CrateInfo) -> Result<PathBuf> {
 
     let path = home_dir.as_path().join(".cargo/registry/doc")
         .join(format!("{}-{}",
-                      crate_info.package.name,
-                      crate_info.package.version));
+                      crate_info.name,
+                      crate_info.version));
     Ok(path)
 }
 
@@ -136,24 +137,31 @@ fn get_crate_doc_path(crate_info: &CrateInfo) -> Result<PathBuf> {
 fn generate_doc_cache(krate: ast::Crate, crate_info: CrateInfo) -> Result<Store> {
     let crate_doc_path = get_crate_doc_path(&crate_info)
         .chain_err(|| format!("Unable to get crate doc path for crate: {}",
-                              &crate_info.package.name))?;
+                              &crate_info.name))?;
 
-    let store = {
+    let documents = {
         let mut v = OxidocVisitor::new(crate_info.clone());
         v.visit_crate(krate);
         let context = Context::new(crate_doc_path.clone(),
-                                       crate_info,
+                                       crate_info.clone(),
                                        v.impls_for_ty.clone());
         v.convert(&context)
     };
 
-    println!("Documents: {}", store.documents.len());
+    println!("Documents: {}", documents.len());
 
-    for doc in &store.documents {
+    for doc in &documents {
         println!("{}", doc);
         println!("{}", doc.to_filepath().display());
-        doc.save(&crate_doc_path).unwrap();
+        doc.save(&crate_info).unwrap();
     }
+
+    let mut docset = Docset::new(crate_info.clone());
+    docset.add_docs(documents);
+
+    let mut store = Store::load();
+    store.add_docset(crate_info, docset);
+    store.save();
 
     Ok(store)
 }
