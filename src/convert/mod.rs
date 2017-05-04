@@ -20,7 +20,7 @@ use document::{self, Impl, Ty, Attributes, CrateInfo, ModPath};
 use store::{Docset, Store};
 use visitor::OxidocVisitor;
 
-use convert::wrappers::*;
+pub use convert::wrappers::*;
 
 #[derive(Clone)]
 pub struct Context {

@@ -27,12 +27,6 @@ pub struct NewDocTemp_ {
     pub links: DocRelatedItems,
 }
 
-impl Display for NewDocTemp_ {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.render())
-    }
-}
-
 impl Display for Visibility {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let vis = match *self {
@@ -50,49 +44,6 @@ impl NewDocTemp_ {
     fn get_doc_filename(&self) -> String {
         let prefix = self.inner_data.get_doc_file_prefix();
         format!("{}{}.odoc", prefix, self.name)
-    }
-
-    fn render(&self) -> String {
-        format!(r#"
-{}
-------------------------------------------------------------------------------
-  {}
-
-------------------------------------------------------------------------------
-
-{}
-
-{}
-"#,
-                self.doc_info(),
-                self.inner_data(),
-                self.docstring(),
-                self.subitems())
-    }
-
-    fn doc_info(&self) -> String {
-        match self.inner_data {
-            DocInnerData::FnDoc(ref func) => {
-                match func.kind {
-                    FnKind::MethodFromImpl => format!("=== Impl on type {}", self.mod_path.parent().unwrap()),
-                    _ => format!("=== In module {}", self.mod_path.parent().unwrap()),
-                }
-            },
-            DocInnerData::StructDoc(..) |
-            DocInnerData::ConstDoc(..) |
-            DocInnerData::EnumDoc(..) |
-            DocInnerData::TraitDoc(..) => {
-                format!("=== In module {}", self.mod_path.parent().unwrap())
-            },
-            DocInnerData::TraitItemDoc(..) => {
-                format!("=== From trait {}", self.mod_path.parent().unwrap())
-            }
-            DocInnerData::ModuleDoc(..) => "".to_string(),
-        }
-    }
-
-    fn docstring(&self) -> String {
-        self.attrs.doc_strings.join("\n")
     }
 
     pub fn get_type(&self) -> DocType {
@@ -125,38 +76,6 @@ impl NewDocTemp_ {
             },
 
         }
-    }
-
-    fn inner_data(&self) -> String {
-        let vis_string = match self.visibility {
-            Some(ref v) => v.to_string(),
-            None    => "".to_string(),
-        };
-
-        let header = match self.inner_data {
-            DocInnerData::FnDoc(ref func) => {
-                format!("fn {} {}", self.name, func.header)
-            },
-            DocInnerData::ModuleDoc(ref mod_) => {
-                format!("mod {}", self.mod_path)
-            },
-            DocInnerData::EnumDoc(ref enum_) => {
-                format!("enum {}", self.name)
-            },
-            DocInnerData::StructDoc(ref struct_) => {
-                format!("struct {} {{ /* fields omitted */ }}", self.name)
-            },
-            DocInnerData::ConstDoc(ref const_) => {
-                format!("const {}: {} = {}", self.name, const_.ty.name, const_.expr)
-            },
-            DocInnerData::TraitDoc(ref trait_) => {
-                format!("trait {} {{ /* fields omitted */ }}", self.name)
-            },
-            DocInnerData::TraitItemDoc(ref item) => {
-                format!("{}", self.trait_item(item))
-            },
-        };
-        format!("{} {}", vis_string, header)
     }
 
     // TODO: Better way for formatting the wrapped types, as pprust does.
@@ -210,33 +129,6 @@ impl NewDocTemp_ {
         } else {
             None
         }
-    }
-
-    fn trait_item(&self, item: &TraitItem) -> String {
-        let item_string = match item.node {
-            TraitItemKind::Const(ref ty, ref expr) => {
-                let expr_string = match *expr {
-                    Some(ref e) => e.clone(),
-                    None    => "".to_string(),
-                };
-                format!("const {}: {} = {}", self.name, ty.name, expr_string)
-            },
-            TraitItemKind::Method(ref sig) => {
-                format!("fn {} {}", self.name, sig.header)
-            },
-            TraitItemKind::Type(ref ty) => {
-                let ty_string = match *ty {
-                    Some(ref t) => t.name.clone(),
-                    None    => "".to_string(),
-                };
-                format!("type {}", ty_string)
-            },
-            TraitItemKind::Macro(ref mac) => {
-                format!("macro {} {}", self.name, mac)
-            },
-        };
-        let doc = self.attrs.doc_strings.join("\n");
-        format!("  {}\n{}", item_string, doc)
     }
 
     pub fn to_filepath(&self) -> PathBuf {

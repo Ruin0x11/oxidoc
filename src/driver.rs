@@ -1,13 +1,7 @@
-use serde::ser::{Serialize};
-use serde::de::{Deserialize};
-use paths;
-use store::*;
-use std::collections::HashMap;
-use std::fmt;
-use std::fmt::Display;
 use document::{ModPath};
-use convert::*;
 use convert::NewDocTemp_;
+use store::{self, StoreLocation};
+use errors::*;
 
 mod errors {
     error_chain! {
@@ -17,9 +11,7 @@ mod errors {
             }
         }
     }
-
 }
-use errors::*;
 
 fn expand_name(name: &String) -> Result<ModPath> {
     let segs = ModPath::from(name.clone());
@@ -27,12 +19,16 @@ fn expand_name(name: &String) -> Result<ModPath> {
 }
 
 pub struct Driver {
-
 }
 
 impl Driver {
     pub fn new() -> Driver {
         Driver { }
+    }
+
+    pub fn get_doc(location: &StoreLocation) -> Result<NewDocTemp_> {
+        let path = location.to_filepath();
+        store::read_bincode_data(path)
     }
 }
 

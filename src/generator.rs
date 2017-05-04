@@ -129,8 +129,6 @@ fn generate_doc_cache(krate: ast::Crate, crate_info: CrateInfo) -> Result<Store>
     println!("Documents: {}", documents.len());
 
     for doc in &documents {
-        println!("{}", doc);
-        println!("{}", doc.to_filepath().display());
         doc.save(&crate_info)?;
     }
 

@@ -11,7 +11,8 @@ use cursive::views::{EditView, LinearLayout, Dialog, SelectView, TextView};
 use cursive::align::HAlign;
 use cursive::traits::*;
 
-use document::ModPath;
+use driver::Driver;
+use markup::Format;
 use store::{Store, StoreLocation};
 use self::search::Search;
 use ::errors::*;
@@ -44,6 +45,8 @@ pub fn run() {
 
     update_search_results(&mut siv, "", 0);
 
+    siv.add_global_callback('q', move |s| s.quit());
+
     siv.run();
 }
 
@@ -75,7 +78,16 @@ fn update_search_results(siv: &mut Cursive, query: &str, _len: usize) {
 // Let's put the callback in a separate function to keep it clean, but it's not required.
 fn show_next_window(siv: &mut Cursive, idx: &usize) {
     siv.pop_layer();
-    let text = format!("{} is a great loc!", PATHS.lock().unwrap().get(*idx).unwrap().clone());
+
+    show_doc(siv, PATHS.lock().unwrap().get(*idx).unwrap())
+}
+
+
+fn show_doc(siv: &mut Cursive, loc: &StoreLocation) {
+    let result = Driver::get_doc(loc).unwrap();
+    let doc = result.format();
+
+    let text = format!("{} is a great loc!", doc);
     siv.add_layer(Dialog::around(TextView::new(text))
                   .button("Quit", |s| s.quit()));
 }

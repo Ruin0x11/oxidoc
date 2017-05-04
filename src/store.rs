@@ -102,6 +102,7 @@ pub struct Store {
 pub struct StoreLocation {
     pub crate_info: CrateInfo,
     pub mod_path: ModPath,
+    pub doc_type: DocType,
 }
 
 impl StoreLocation {
@@ -113,8 +114,10 @@ impl StoreLocation {
     }
 
     pub fn to_filepath(&self) -> PathBuf {
-        let mut path = self.crate_info.to_path_prefix();
-        path.push(self.mod_path.to_filepath());
+        let mut path = get_crate_doc_path(&self.crate_info).unwrap();
+        let doc_path = self.mod_path.tail().unwrap().to_filepath();
+        // The mod path will have {{root}} at the beginning, so skip it.
+        path.push(doc_path);
         path
     }
 }
@@ -188,5 +191,23 @@ impl Docset {
                 .chain_err(|| format!("Could not add doc {} to docset", doc.mod_path))?;
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_store_loc_to_path() {
+        let loc = StoreLocation {
+            crate_info: CrateInfo {
+                name: "test".to_string(),
+                version: "0.1.0".to_string(),
+            },
+            mod_path: ModPath::from("{{root}}::crate::mod".to_string()),
+        };
+
+        assert_eq!(loc.to_filepath(), PathBuf::from("test-0.1.0/crate/mod/mod.mdesc"));
     }
 }

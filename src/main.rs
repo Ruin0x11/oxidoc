@@ -3,6 +3,7 @@
 #[macro_use] extern crate log;
 #[macro_use] extern crate serde_derive;
 #[macro_use] extern crate clap;
+extern crate ansi_term;
 extern crate bincode;
 extern crate cursive;
 extern crate env_logger;
@@ -18,6 +19,7 @@ mod document;
 mod driver;
 mod generator;
 mod io_support;
+mod markup;
 mod paths;
 mod store;
 mod toml_util;
