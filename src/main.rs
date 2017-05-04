@@ -10,7 +10,6 @@ extern crate env_logger;
 extern crate pager;
 extern crate regex;
 extern crate serde;
-extern crate serde_json;
 extern crate syntex_syntax as syntax;
 extern crate toml;
 

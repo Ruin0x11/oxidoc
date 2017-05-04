@@ -1,3 +1,4 @@
+use store::StoreLocation;
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
@@ -20,6 +21,7 @@ pub type DocRelatedItems = HashMap<DocType, Vec<DocLink>>;
 pub struct NewDocTemp_ {
     pub name: String,
     pub attrs: Attributes,
+    pub crate_info: CrateInfo,
     pub mod_path: ModPath,
     pub inner_data: DocInnerData,
     pub visibility: Option<Visibility>,
@@ -42,7 +44,7 @@ impl DocInnerData {
 
 impl NewDocTemp_ {
     fn get_doc_filename(&self) -> String {
-        let prefix = self.inner_data.get_doc_file_prefix();
+        let prefix = self.get_type().get_file_prefix().to_string();
         format!("{}{}.odoc", prefix, self.name)
     }
 
@@ -131,17 +133,18 @@ impl NewDocTemp_ {
         }
     }
 
-    pub fn to_filepath(&self) -> PathBuf {
-        let mut path = self.mod_path.to_filepath();
-        path.push(self.get_doc_filename());
-        let prefix = PathBuf::from("{{root}}");
-        let stripped = path.strip_prefix(&prefix).unwrap();
-        stripped.to_path_buf()
+    pub fn to_store_location(&self) -> StoreLocation {
+        StoreLocation {
+            name: self.name.clone(),
+            crate_info: self.crate_info.clone(),
+            mod_path: self.mod_path.tail(),
+            doc_type: self.get_type(),
+        }
     }
 
-    pub fn save(&self, crate_info: &CrateInfo) -> Result<()> {
-        let mut path = store::get_crate_doc_path(crate_info)?;
-        path.push(self.to_filepath());
+    pub fn save(&self) -> Result<()> {
+        let location = self.to_store_location();
+        let path = location.to_filepath();
 
         {
             let parent_path = path.parent().unwrap();
@@ -150,9 +153,7 @@ impl NewDocTemp_ {
                 .chain_err(|| format!("Failed to create directory {}", parent_path.display()))?;
         }
 
-        let data = bincode::serialize(self, Infinite)
-            .chain_err(|| format!("Could not serialize doc {}", self.mod_path))?;
-        store::write_bincode_data(data, path)
+        store::serialize_object(self, path)
     }
 }
 
@@ -163,7 +164,7 @@ pub struct DocLink
     pub path: ModPath,
 }
 
-#[derive(Hash, Eq, PartialEq, Debug, Serialize, Deserialize)]
+#[derive(Clone, Hash, Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub enum DocType {
     Function,
     Module,
@@ -180,6 +181,28 @@ pub enum DocType {
     TraitItemMacro,
     AssocType,
     Macro,
+}
+
+impl DocType {
+    pub fn get_file_prefix(&self) -> &str {
+        match *self {
+            DocType::Function => "",
+            DocType::Module => "mdesc-",
+            DocType::Enum => "edesc-",
+            DocType::Variant => "vdesc-",
+            DocType::Struct => "sdesc-",
+            DocType::StructField => "sfdesc-",
+            DocType::Const => "cdesc-",
+            DocType::Trait => "tdesc-",
+            DocType::AssocConst  => &"acdesc-",
+            DocType::TraitItemConst => &"tcdesc-",
+            DocType::TraitItemMethod => &"tmcdesc-",
+            DocType::TraitItemType => &"ttcdesc-",
+            DocType::TraitItemMacro => &"tmdesc-",
+            DocType::AssocType   => &"atdesc-",
+            DocType::Macro  => &"macdesc-",
+        }
+    }
 }
 
 impl Display for DocType {
@@ -218,18 +241,4 @@ pub enum DocInnerData {
     //TypedefDoc,
     TraitDoc(Trait),
     TraitItemDoc(TraitItem),
-}
-
-impl DocInnerData {
-    fn get_doc_file_prefix(&self) -> &str {
-        match *self {
-            DocInnerData::ModuleDoc(..) => "mdesc-",
-            DocInnerData::EnumDoc(..)   => "edesc-",
-            DocInnerData::StructDoc(..) => "sdesc-",
-            DocInnerData::ConstDoc(..)  => "cdesc-",
-            DocInnerData::TraitDoc(..)  => "tdesc-",
-            DocInnerData::FnDoc(..) |
-            DocInnerData::TraitItemDoc(..) => "",
-        }
-    }
 }

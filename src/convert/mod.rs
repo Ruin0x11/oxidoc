@@ -3,10 +3,8 @@
 
 mod wrappers;
 mod doc_containers;
-mod storable;
 
 pub use convert::doc_containers::*;
-pub use convert::storable::*;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -159,6 +157,7 @@ impl Convert<Vec<NewDocTemp_>> for document::Module {
             name: name.clone(),
             attrs: self.attrs.convert(context),
             mod_path: self.path.clone(),
+            crate_info: context.crate_info.clone(),
             visibility: Some(self.vis.convert(context)),
             inner_data: ModuleDoc(Module {
                 is_crate: self.is_crate,
@@ -178,6 +177,7 @@ impl Convert<NewDocTemp_> for document::Constant {
             name: self.ident.convert(context),
             attrs: self.attrs.convert(context),
             mod_path: self.path.clone(),
+            crate_info: context.crate_info.clone(),
             visibility: Some(self.vis.convert(context)),
             inner_data: ConstDoc(Constant {
                 ty: self.type_.clone(),
@@ -194,6 +194,7 @@ impl Convert<NewDocTemp_> for document::Function {
             name: self.ident.convert(context),
             attrs: self.attrs.convert(context),
             mod_path: self.path.clone(),
+            crate_info: context.crate_info.clone(),
             visibility: Some(self.vis.convert(context)),
             inner_data: FnDoc(Function {
                 header: self.decl.convert(context),
@@ -225,6 +226,7 @@ impl Convert<NewDocTemp_> for document::Trait {
             name: self.ident.convert(context),
             attrs: self.attrs.convert(context),
             mod_path: self.path.clone(),
+            crate_info: context.crate_info.clone(),
             visibility: Some(self.vis.convert(context)),
             inner_data: TraitDoc(Trait {
                 unsafety: self.unsafety.convert(context),
@@ -240,6 +242,7 @@ impl Convert<NewDocTemp_> for document::TraitItem {
             name: self.ident.convert(context),
             attrs: self.attrs.convert(context),
             mod_path: self.path.clone(),
+            crate_info: context.crate_info.clone(),
             visibility: Some(Visibility::Inherited),
             inner_data: TraitItemDoc(TraitItem {
                 node: self.node.convert(context),
@@ -317,6 +320,7 @@ impl Convert<NewDocTemp_> for document::Struct {
             name: self.ident.convert(context),
             attrs: self.attrs.convert(context),
             mod_path: self.path.clone(),
+            crate_info: context.crate_info.clone(),
             visibility: Some(self.vis.convert(context)),
             inner_data: StructDoc(Struct {
                 fields: self.fields.convert(context),
@@ -402,6 +406,7 @@ impl Convert<NewDocTemp_> for document::Enum {
             name: self.ident.convert(context),
             attrs: self.attrs.convert(context),
             mod_path: self.path.clone(),
+            crate_info: context.crate_info.clone(),
             visibility: Some(Visibility::Inherited),
             inner_data: EnumDoc(Enum {
                 variants: self.variants.convert(context),

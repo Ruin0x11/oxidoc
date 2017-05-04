@@ -15,7 +15,7 @@ use document::CrateInfo;
 use document::ModPath;
 use ::errors::*;
 
-const STORE_FILENAME: &str = "store.odoc";
+const STORE_FILENAME: &str = "store";
 
 pub fn get_doc_registry_path() -> Result<PathBuf> {
     let home_dir = if let Some(dir) = env::home_dir() {
@@ -62,30 +62,31 @@ fn create_or_open_file<T: AsRef<Path>>(path: T) -> Result<File> {
     }
 }
 
-pub fn read_bincode_data<S, T>(path: T) -> Result<S>
+pub fn deserialize_object<S, T>(path: T) -> Result<S>
     where S: Deserialize,
           T: AsRef<Path>
 {
     let path_as = path.as_ref();
     let mut data: Vec<u8> = Vec::new();
-    let mut bincoded_file = create_or_open_file(path_as)?;
+    let mut bincoded_file = File::open(&path_as)
+        .chain_err(|| format!("Could not open file {}", path_as.display()))?;
 
     bincoded_file.read_to_end(&mut data)
         .chain_err(|| format!("Failed to read file {}", path_as.display()))?;
-    let result = bincode::deserialize(&data)
+    let result = bincode::deserialize(data.as_slice())
         .chain_err(|| format!("Could not deserialize file at {}", path_as.display()))?;
 
     Ok(result)
 }
 
-pub fn write_bincode_data<S, T>(data: S, path: T) -> Result<()>
+pub fn serialize_object<S, T>(data: &S, path: T) -> Result<()>
     where S: Serialize,
           T: AsRef<Path>
 {
     let path_as = path.as_ref();
 
-    let data = bincode::serialize(&data, Infinite)
-        .chain_err(|| format!("Could not deserialize file at {}", path_as.display()))?;
+    let data = bincode::serialize(data, Infinite)
+        .chain_err(|| format!("Could not serialize data for {}", path_as.display()))?;
 
     let mut bincoded_file = create_or_open_file(path_as)?;
     bincoded_file.write(data.as_slice())
@@ -99,25 +100,34 @@ pub struct Store {
     items: HashMap<CrateInfo, Docset>,
 }
 
+#[derive(Serialize, Deserialize, Clone)]
 pub struct StoreLocation {
+    pub name: String,
     pub crate_info: CrateInfo,
     pub mod_path: ModPath,
     pub doc_type: DocType,
 }
 
 impl StoreLocation {
-    pub fn new(crate_info: CrateInfo, mod_path: ModPath) -> Self {
+    pub fn new(name: String,
+               crate_info: CrateInfo,
+               mod_path: ModPath,
+               doc_type: DocType) -> Self
+    {
         StoreLocation {
+            name: name,
             crate_info: crate_info,
             mod_path: mod_path,
+            doc_type: doc_type,
         }
     }
 
     pub fn to_filepath(&self) -> PathBuf {
         let mut path = get_crate_doc_path(&self.crate_info).unwrap();
-        let doc_path = self.mod_path.tail().unwrap().to_filepath();
-        // The mod path will have {{root}} at the beginning, so skip it.
+        let doc_path = self.mod_path.to_filepath();
         path.push(doc_path);
+        let filename = format!("{}{}.odoc", self.doc_type.get_file_prefix(), self.name);
+        path.push(filename);
         path
     }
 }
@@ -144,12 +154,12 @@ impl Store {
 
     pub fn save(&mut self) -> Result<()> {
         let store_file = get_store_file()?;
-        write_bincode_data(self, store_file)
+        serialize_object(self, store_file)
     }
 
     pub fn load_from_disk() -> Result<Self> {
         let store_file = get_store_file()?;
-        read_bincode_data(store_file)
+        deserialize_object(store_file)
     }
 
     pub fn add_docset(&mut self, crate_info: CrateInfo, docset: Docset) {
@@ -159,11 +169,7 @@ impl Store {
     pub fn all_locations(&self) -> Vec<StoreLocation> {
         let mut results = Vec::new();
         for docset in self.items.values() {
-            for paths in docset.documents.values() {
-                for path in paths.iter() {
-                    results.push(StoreLocation::new(docset.crate_info.clone(), path.clone()));
-                }
-            }
+            results.extend(docset.documents.clone());
         }
         results
     }
@@ -171,23 +177,20 @@ impl Store {
 
 #[derive(Serialize, Deserialize)]
 pub struct Docset {
-    pub crate_info: CrateInfo,
-    pub documents: HashMap<DocType, Vec<ModPath>>,
+    pub documents: Vec<StoreLocation>,
 }
 
 impl Docset {
-    pub fn new(crate_info: CrateInfo) -> Self {
+    pub fn new() -> Self {
         Docset {
-            crate_info: crate_info,
-            documents: HashMap::new(),
+            documents: Vec::new(),
         }
     }
 
     pub fn add_docs(&mut self, documents: Vec<NewDocTemp_>) -> Result<()> {
         for doc in documents.into_iter() {
-            let entry = self.documents.entry(doc.get_type()).or_insert(Vec::new());
-            entry.push(doc.mod_path.clone());
-            doc.save(&self.crate_info)
+            self.documents.push(doc.to_store_location());
+            doc.save()
                 .chain_err(|| format!("Could not add doc {} to docset", doc.mod_path))?;
         }
         Ok(())
@@ -199,15 +202,28 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_read_write_bincode() {
+        let string = "Test.".to_string();
+        let path = PathBuf::from("/tmp/test.txt");
+
+        serialize_object(&string, &path).expect("Write failed");
+        let result: String = deserialize_object(&path).expect("Read failed");
+
+        assert_eq!(string, result);
+    }
+
+    #[test]
     fn test_store_loc_to_path() {
         let loc = StoreLocation {
+            name: "TEST".to_string(),
             crate_info: CrateInfo {
                 name: "test".to_string(),
                 version: "0.1.0".to_string(),
             },
             mod_path: ModPath::from("{{root}}::crate::mod".to_string()),
+            doc_type: DocType::Const,
         };
 
-        assert_eq!(loc.to_filepath(), PathBuf::from("test-0.1.0/crate/mod/mod.mdesc"));
+        assert_eq!(loc.to_filepath(), PathBuf::from("test-0.1.0/crate/mod/TEST/cdesc-TEST.odoc"));
     }
 }

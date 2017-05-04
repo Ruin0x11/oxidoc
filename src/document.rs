@@ -98,13 +98,9 @@ impl ModPath {
         }
     }
 
-    pub fn tail(&self) -> Option<ModPath> {
+    pub fn tail(&self) -> ModPath {
         let (_, tail) = self.0.split_at(1);
-        if !tail.is_empty() {
-            Some(ModPath(tail.clone().to_vec()))
-        } else {
-            None
-        }
+        ModPath(tail.clone().to_vec())
     }
 
     pub fn join(first: &ModPath, other: &ModPath) -> ModPath {

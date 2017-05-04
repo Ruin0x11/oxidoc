@@ -1,18 +1,16 @@
 use std;
 use std::env;
 use std::path::{Path, PathBuf};
-use std::io::{Read};
-use std::fs::{File, remove_dir_all};
+use std::fs::remove_dir_all;
 
 use store::Store;
-use toml;
 use syntax::ast;
 use syntax::diagnostics::plugin::DiagnosticBuilder;
 use syntax::parse::{self, ParseSess};
 
 use paths;
 use document::*;
-use convert::{Convert, Context, Storable};
+use convert::{Convert, Context};
 use store::{self, Docset};
 use toml_util;
 use visitor::OxidocVisitor;
@@ -45,8 +43,7 @@ pub fn generate_all() -> Result<()> {
 
     let path = home_dir.as_path().join(".cargo/registry/doc");
 
-    remove_dir_all(path)
-        .chain_err(|| "Could not remove cargo doc directory")?;
+    remove_dir_all(path);
 
     for src_dir in paths::src_iter(true, true)
         .chain_err(|| "Could not iterate cargo registry src directories")?
@@ -129,10 +126,10 @@ fn generate_doc_cache(krate: ast::Crate, crate_info: CrateInfo) -> Result<Store>
     println!("Documents: {}", documents.len());
 
     for doc in &documents {
-        doc.save(&crate_info)?;
+        doc.save()?;
     }
 
-    let mut docset = Docset::new(crate_info.clone());
+    let mut docset = Docset::new();
     docset.add_docs(documents)?;
 
     let mut store = Store::load();

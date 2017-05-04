@@ -28,7 +28,7 @@ impl Driver {
 
     pub fn get_doc(location: &StoreLocation) -> Result<NewDocTemp_> {
         let path = location.to_filepath();
-        store::read_bincode_data(path)
+        store::deserialize_object(path)
     }
 }
 

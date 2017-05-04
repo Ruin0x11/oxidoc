@@ -21,7 +21,7 @@ impl fmt::Display for Markup {
             Section(ref text) => Style::new().bold().paint(format!("== {}", text)).to_string(),
             Block(ref text) => text.clone(),
             Rule(ref count) => "-".repeat(*count),
-            LineBreak => "\n\n".to_string()
+            LineBreak => "\n".to_string()
         };
         write!(f, "{}", string)
     }
@@ -43,6 +43,7 @@ impl fmt::Display for MarkupDoc {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         for part in self.parts.iter() {
             part.fmt(f)?;
+            write!(f, "\n")?;
         }
         Ok(())
     }
@@ -56,7 +57,7 @@ impl Format for NewDocTemp_ {
     fn format(&self) -> MarkupDoc {
         let header = self.mod_path.format();
         let info = doc_inner_info(self);
-        let signature = self.inner_data.format();
+        let signature = doc_signature(self);
         let body = self.attrs.format();
 
         let mut result = Vec::new();
@@ -127,7 +128,11 @@ fn doc_signature(data: &NewDocTemp_) -> MarkupDoc {
         },
     };
 
-    MarkupDoc::new(vec![Block(format!("{} {}", vis_string, header))])
+    MarkupDoc::new(vec![
+        Rule(10),
+        Block(format!("{} {}", vis_string, header)),
+        LineBreak,
+        Rule(10)])
 }
 
 fn trait_item(data: &NewDocTemp_, item: &TraitItem) -> String {
@@ -154,15 +159,6 @@ fn trait_item(data: &NewDocTemp_, item: &TraitItem) -> String {
         },
     };
     item_string
-}
-
-impl Format for DocInnerData {
-    fn format(&self) -> MarkupDoc {
-        MarkupDoc::new(vec![Rule(40),
-
-                            LineBreak,
-                            Rule(40)])
-    }
 }
 
 impl Format for Attributes {
