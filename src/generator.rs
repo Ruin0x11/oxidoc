@@ -1,29 +1,20 @@
 use std;
-use store::Store;
-use toml;
-
-use std::collections::HashMap;
-use std::fmt::{self, Display};
 use std::env;
 use std::path::{Path, PathBuf};
 use std::io::{Read};
 use std::fs::{File, remove_dir_all};
 
-use syntax::abi;
-use syntax::ast::{self, ViewPath};
-use syntax::attr;
-use syntax::print::pprust;
-use syntax::codemap::Spanned;
-use syntax::codemap::{Span};
+use store::Store;
+use toml;
+use syntax::ast;
 use syntax::diagnostics::plugin::DiagnosticBuilder;
 use syntax::parse::{self, ParseSess};
-use syntax::visit::{self, Visitor};
-use syntax::symbol::{Symbol};
 
 use paths;
 use document::*;
 use convert::{Convert, Context, Storable};
-use store::Docset;
+use store::{self, Docset};
+use toml_util;
 use visitor::OxidocVisitor;
 
 use ::errors::*;
@@ -78,20 +69,23 @@ pub fn generate(src_dir: PathBuf) -> Result<()> {
     Ok(())
 }
 
+fn get_crate_info(crate_path: &PathBuf) -> Result<CrateInfo> {
+    let toml_path = crate_path.join("Cargo.toml");
+
+    let toml_table = toml_util::toml_value_from_file(toml_path)?;
+
+    let info = CrateInfo {
+        name: toml_util::get_toml_value(&toml_table, "package", "name")?,
+        version: toml_util::get_toml_value(&toml_table, "package", "version")?,
+    };
+
+    Ok(info)
+}
+
 /// Generates cached Rustdoc information for the given crate.
 /// Expects the crate root directory as an argument.
 fn cache_doc_for_crate(crate_path: &PathBuf) -> Result<()> {
-    let toml_path = crate_path.join("Cargo.toml");
-
-    let mut fp = File::open(&toml_path)
-        .chain_err(|| format!("Could not find Cargo.toml in path {}",
-                              toml_path.display()))?;
-
-    let ref mut contents = String::new();
-    fp.read_to_string(contents).chain_err(|| "Failed to read from file")?;
-
-    let info: CrateInfo = toml::de::from_str(contents)
-        .chain_err(|| "Couldn't parse Cargo.toml")?;
+    let info = get_crate_info(crate_path)?;
 
     println!("Generating documentation for {}", &info);
 
@@ -117,25 +111,9 @@ fn cache_doc_for_crate(crate_path: &PathBuf) -> Result<()> {
         .chain_err(|| "Couldn't save oxidoc data for module")
 }
 
-/// Obtains the base output path for a crate's documentation.
-fn get_crate_doc_path(crate_info: &CrateInfo) -> Result<PathBuf> {
-    let home_dir: PathBuf;
-    if let Some(x) = env::home_dir() {
-        home_dir = x
-    } else {
-        bail!("Could not locate home directory");
-    }
-
-    let path = home_dir.as_path().join(".cargo/registry/doc")
-        .join(format!("{}-{}",
-                      crate_info.name,
-                      crate_info.version));
-    Ok(path)
-}
-
 /// Generates documentation for the given crate.
 fn generate_doc_cache(krate: ast::Crate, crate_info: CrateInfo) -> Result<Store> {
-    let crate_doc_path = get_crate_doc_path(&crate_info)
+    let crate_doc_path = store::get_crate_doc_path(&crate_info)
         .chain_err(|| format!("Unable to get crate doc path for crate: {}",
                               &crate_info.name))?;
 
@@ -143,8 +121,8 @@ fn generate_doc_cache(krate: ast::Crate, crate_info: CrateInfo) -> Result<Store>
         let mut v = OxidocVisitor::new(crate_info.clone());
         v.visit_crate(krate);
         let context = Context::new(crate_doc_path.clone(),
-                                       crate_info.clone(),
-                                       v.impls_for_ty.clone());
+                                   crate_info.clone(),
+                                   v.impls_for_ty.clone());
         v.convert(&context)
     };
 
@@ -153,15 +131,15 @@ fn generate_doc_cache(krate: ast::Crate, crate_info: CrateInfo) -> Result<Store>
     for doc in &documents {
         println!("{}", doc);
         println!("{}", doc.to_filepath().display());
-        doc.save(&crate_info).unwrap();
+        doc.save(&crate_info)?;
     }
 
     let mut docset = Docset::new(crate_info.clone());
-    docset.add_docs(documents);
+    docset.add_docs(documents)?;
 
     let mut store = Store::load();
     store.add_docset(crate_info, docset);
-    store.save();
+    store.save()?;
 
     Ok(store)
 }

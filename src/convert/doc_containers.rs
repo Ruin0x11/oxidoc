@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fs;
 use std::path::PathBuf;
 use std::fmt::{self, Display};
 
@@ -122,7 +123,7 @@ impl NewDocTemp_ {
                         TraitItemKind::Macro(..)  => DocType::TraitItemMacro,
                     }
             },
-            
+
         }
     }
 
@@ -247,8 +248,15 @@ impl NewDocTemp_ {
     }
 
     pub fn save(&self, crate_info: &CrateInfo) -> Result<()> {
-        let mut path = crate_info.to_path_prefix();
+        let mut path = store::get_crate_doc_path(crate_info)?;
         path.push(self.to_filepath());
+
+        {
+            let parent_path = path.parent().unwrap();
+
+            fs::create_dir_all(parent_path)
+                .chain_err(|| format!("Failed to create directory {}", parent_path.display()))?;
+        }
 
         let data = bincode::serialize(self, Infinite)
             .chain_err(|| format!("Could not serialize doc {}", self.mod_path))?;

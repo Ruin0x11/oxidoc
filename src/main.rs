@@ -1,10 +1,13 @@
+#[macro_use] extern crate lazy_static;
 #[macro_use] extern crate error_chain;
 #[macro_use] extern crate log;
 #[macro_use] extern crate serde_derive;
 #[macro_use] extern crate clap;
 extern crate bincode;
+extern crate cursive;
 extern crate env_logger;
 extern crate pager;
+extern crate regex;
 extern crate serde;
 extern crate serde_json;
 extern crate syntex_syntax as syntax;
@@ -17,6 +20,8 @@ mod generator;
 mod io_support;
 mod paths;
 mod store;
+mod toml_util;
+mod tui;
 mod visitor;
 
 use std::path::PathBuf;
@@ -91,15 +96,12 @@ fn run() -> Result<()> {
         }
     }
 
-    Pager::new().setup();
+    // Pager::new().setup();
+    // let query = match matches.value_of("query") {
+    //     Some(x) => x,
+    //     None => bail!("No search query was provided.")
+    // };
 
-    let query = match matches.value_of("query") {
-        Some(x) => x,
-        None => bail!("No search query was provided.")
-    };
-
-    let driver = Driver::new();
-    let mut v = Vec::new();
-    v.push(query.to_string());
+    ::tui::run();
     Ok(())
 }

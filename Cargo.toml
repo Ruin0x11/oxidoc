@@ -16,3 +16,5 @@ log = "0.3"
 env_logger = "0.3"
 pager = "0.9.4"
 regex = "0.2"
+cursive = { git = "https://github.com/gyscos/Cursive" }
+lazy_static = "0.2.8"
