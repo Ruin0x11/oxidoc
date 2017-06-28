@@ -18,3 +18,14 @@ regex = "0.2"
 cursive = { git = "https://github.com/gyscos/Cursive" }
 lazy_static = "0.2.8"
 ansi_term = "0.9"
+
+[lib]
+name = "oxidoc"
+path = "src/lib.rs"
+
+[[bin]]
+name = "oxidoc"
+path = "src/main.rs"
+
+[[test]]
+name = "tests"

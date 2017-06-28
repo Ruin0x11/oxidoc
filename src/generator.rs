@@ -10,7 +10,7 @@ use syntax::parse::{self, ParseSess};
 
 use paths;
 use document::*;
-use convert::{Convert, Context};
+use convert::{Convert, Context, NewDocTemp_};
 use store::{self, Docset};
 use toml_util;
 use visitor::OxidocVisitor;
@@ -108,20 +108,22 @@ fn cache_doc_for_crate(crate_path: &PathBuf) -> Result<()> {
         .chain_err(|| "Couldn't save oxidoc data for module")
 }
 
-/// Generates documentation for the given crate.
-fn generate_doc_cache(krate: ast::Crate, crate_info: CrateInfo) -> Result<Store> {
+pub fn generate_crate_docs(krate: ast::Crate, crate_info: CrateInfo) -> Result<Vec<NewDocTemp_>> {
     let crate_doc_path = store::get_crate_doc_path(&crate_info)
         .chain_err(|| format!("Unable to get crate doc path for crate: {}",
                               &crate_info.name))?;
 
-    let documents = {
-        let mut v = OxidocVisitor::new(crate_info.clone());
-        v.visit_crate(krate);
-        let context = Context::new(crate_doc_path.clone(),
-                                   crate_info.clone(),
-                                   v.impls_for_ty.clone());
-        v.convert(&context)
-    };
+    let mut v = OxidocVisitor::new(crate_info.clone());
+    v.visit_crate(krate);
+    let context = Context::new(crate_doc_path.clone(),
+                               crate_info,
+                               v.impls_for_ty.clone());
+    Ok(v.convert(&context))
+}
+
+/// Generates documentation for the given crate.
+pub fn generate_doc_cache(krate: ast::Crate, crate_info: CrateInfo) -> Result<Store> {
+    let documents = generate_crate_docs(krate, crate_info.clone())?;
 
     println!("Documents: {}", documents.len());
 

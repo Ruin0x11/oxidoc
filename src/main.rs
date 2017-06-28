@@ -13,30 +13,14 @@ extern crate serde;
 extern crate syntex_syntax as syntax;
 extern crate toml;
 
-mod convert;
-mod document;
-mod driver;
-mod generator;
-mod io_support;
-mod markup;
-mod paths;
-mod store;
-mod toml_util;
-mod tui;
-mod visitor;
+extern crate oxidoc;
 
 use std::path::PathBuf;
+
 use clap::{App, Arg};
-use pager::Pager;
-
-use driver::Driver;
-
-mod errors {
-    // Create the Error, ErrorKind, ResultExt, and Result types
-    error_chain! { }
-}
-
-use errors::*;
+use oxidoc::generator;
+use oxidoc::errors::*;
+use oxidoc::tui;
 
 fn app<'a, 'b>() -> App<'a, 'b> {
     App::new(format!("oxidoc {}", crate_version!()))
@@ -103,6 +87,6 @@ fn run() -> Result<()> {
     //     None => bail!("No search query was provided.")
     // };
 
-    ::tui::run();
+    tui::run();
     Ok(())
 }
