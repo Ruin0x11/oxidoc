@@ -327,7 +327,7 @@ impl OxidocVisitor {
         if let Some(name) = mod_name {
             self.current_scope.push_string(pprust::ident_to_string(name));
         } else {
-            self.current_scope.push_string(pprust::ident_to_string(keywords::CrateRoot.ident()));
+            self.current_scope.push_string(self.crate_info.name.clone());
         }
 
         module.path = self.current_scope.clone();

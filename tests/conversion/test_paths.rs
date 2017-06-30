@@ -35,9 +35,17 @@ fn make_docs(docs_str: &str) -> Vec<NewDocTemp_> {
     generator::generate_crate_docs(krate, crate_info).unwrap()
 }
 
-fn assert_paths_found(converted: &Vec<NewDocTemp_>, paths: Vec<&str>) {
+fn assert_paths_found(converted: &Vec<NewDocTemp_>, mut paths: Vec<&str>) {
+    let mut converted_strings: Vec<String> = converted.iter()
+        .map(|doc| doc.mod_path.to_string())
+        .collect();
+
+    converted_strings.sort();
+    paths.sort();
+
     let expected_paths: Vec<ModPath> = paths.into_iter().map(|s| ModPath::from(s.to_string())).collect();
-    let found_paths: Vec<ModPath> = converted.iter().map(|d| d.mod_path.clone()).collect();
+    let found_paths: Vec<ModPath> = converted_strings.into_iter().map(|d| ModPath::from(d)).collect();
+
     assert!(found_paths == expected_paths, "\nFound\n====\n{}\n\nExpected\n====\n{}\n",
             print_paths(&found_paths),
             print_paths(&expected_paths));
