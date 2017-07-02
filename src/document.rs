@@ -1,8 +1,9 @@
-use std::fs::{File, create_dir_all};
-use std::io::{Read, Write};
 use std::collections::HashMap;
 use std::fmt::{self, Display};
+use std::fs::{File, create_dir_all};
+use std::io::{Read, Write};
 use std::path::PathBuf;
+use std::slice;
 
 use syntax::ast::{self, Name};
 use syntax::abi;
@@ -112,6 +113,10 @@ impl ModPath {
     pub fn to_filepath(&self) -> PathBuf {
         PathBuf::from(self.0.iter().fold(String::new(), |res, s| res + &s.identifier.clone() + "/"))
     }
+
+    pub fn segments(&self) -> slice::Iter<PathSegment> {
+        self.0.iter()
+    }
 }
 
 impl From<String> for ModPath {
@@ -145,6 +150,7 @@ impl Display for ModPath {
 pub struct CrateInfo {
     pub name: String,
     pub version: String,
+    pub lib_path: Option<String>,
 }
 
 impl CrateInfo {
@@ -163,6 +169,63 @@ pub trait Documentable {
     fn get_info(&self, path: &ModPath) -> String;
     fn get_filename(name: String) -> String;
 }
+
+// FIXME: Duplication from librustdoc
+pub struct ListAttributesIter<'a> {
+    attrs: slice::Iter<'a, ast::Attribute>,
+    current_list: slice::Iter<'a, ast::NestedMetaItem>,
+    name: &'a str
+}
+
+impl<'a> Iterator for ListAttributesIter<'a> {
+    type Item = &'a ast::NestedMetaItem;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(nested) = self.current_list.next() {
+            return Some(nested);
+        }
+
+        for attr in &mut self.attrs {
+            if let Some(ref list) = attr.meta_item_list() {
+                if attr.check_name(self.name) {
+                    self.current_list = list.iter();
+                    if let Some(nested) = self.current_list.next() {
+                        return Some(nested);
+                    }
+                }
+            }
+        }
+
+        None
+    }
+}
+
+pub trait AttributesExt {
+    /// Finds an attribute as List and returns the list of attributes nested inside.
+    fn lists<'a>(&'a self, &'a str) -> ListAttributesIter<'a>;
+}
+
+impl AttributesExt for [ast::Attribute] {
+    fn lists<'a>(&'a self, name: &'a str) -> ListAttributesIter<'a> {
+        ListAttributesIter {
+            attrs: self.iter(),
+            current_list: [].iter(),
+            name: name
+        }
+    }
+}
+
+pub trait NestedAttributesExt {
+    /// Returns whether the attribute list contains a specific `Word`
+    fn has_word(self, &str) -> bool;
+}
+
+impl<'a, I: IntoIterator<Item=&'a ast::NestedMetaItem>> NestedAttributesExt for I {
+    fn has_word(self, word: &str) -> bool {
+        self.into_iter().any(|attr| attr.is_word() && attr.check_name(word))
+    }
+}
+
 
 #[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub struct Attributes {

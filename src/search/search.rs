@@ -1,6 +1,7 @@
-use tui::score::{self, Match};
-use tui::sorted_result_set::SortedResultSet;
 use std::ascii::AsciiExt;
+
+use super::score::{self, Match};
+use super::sorted_result_set::SortedResultSet;
 
 #[derive(Debug)]
 pub struct Search<'s> {

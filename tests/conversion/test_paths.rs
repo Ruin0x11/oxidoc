@@ -1,39 +1,7 @@
 use oxidoc::convert::NewDocTemp_;
-use oxidoc::document::{CrateInfo, ModPath};
-use oxidoc::generator;
+use oxidoc::document::ModPath;
 
-use syntax::parse::{self, ParseSess};
-use syntax::ast;
-
-fn print_paths(paths: &Vec<ModPath>) -> String {
-    let mut s = String::new();
-    for path in paths.iter() {
-        s.push_str(&format!("{}\n", path));
-    }
-    s
-}
-
-fn parse_crate(docs_string: String) -> ast::Crate {
-    let parse_session = ParseSess::new();
-    let result = parse::parse_crate_from_source_str("test.rs".to_string(), docs_string,
-                                                    &parse_session);
-    match result {
-        Ok(_) if parse_session.span_diagnostic.has_errors() => panic!("Parse error"),
-        Ok(krate) => krate,
-        Err(_) => panic!("Failed to parse"),
-    }
-}
-
-fn make_docs(docs_str: &str) -> Vec<NewDocTemp_> {
-    let krate = parse_crate(docs_str.to_string());
-
-    let crate_info = CrateInfo {
-        name: "crate".to_string(),
-        version: "1.0.0".to_string(),
-    };
-
-    generator::generate_crate_docs(krate, crate_info).unwrap()
-}
+use util::{source_to_docs, print_paths};
 
 fn assert_paths_found(converted: &Vec<NewDocTemp_>, mut paths: Vec<&str>) {
     let mut converted_strings: Vec<String> = converted.iter()
@@ -53,28 +21,43 @@ fn assert_paths_found(converted: &Vec<NewDocTemp_>, mut paths: Vec<&str>) {
 
 #[test]
 fn test_no_modules() {
-    let docs = make_docs("");
+    let docs = source_to_docs("");
     assert_paths_found(&docs, vec!["crate"]);
 }
 
 #[test]
 fn test_one_module() {
-    let docs = make_docs("pub mod test { }");
+    let docs = source_to_docs("pub mod test { }");
     assert_paths_found(&docs, vec!["crate",
                                    "crate::test"]);
 }
 
 #[test]
 fn test_one_struct() {
-    let docs = make_docs("pub mod test { pub struct MyStruct; }");
+    let docs = source_to_docs("pub mod test { pub struct MyStruct; }");
     assert_paths_found(&docs, vec!["crate",
                                    "crate::test",
                                    "crate::test::MyStruct"]);
 }
 
 #[test]
+fn test_doc_hidden() {
+    let docs = source_to_docs(r#"
+pub mod test {
+    #[doc(hidden)]
+    pub struct MyStruct;
+
+    impl MyStruct {
+        pub fn method() {}
+    }
+}"#);
+    assert_paths_found(&docs, vec!["crate",
+                                   "crate::test"]);
+}
+
+#[test]
 fn test_one_method() {
-    let docs = make_docs(r#"
+    let docs = source_to_docs(r#"
 pub mod test {
     pub struct MyStruct;
 
@@ -90,7 +73,7 @@ pub mod test {
 
 #[test]
 fn test_nested_modules() {
-    let docs = make_docs(r#"
+    let docs = source_to_docs(r#"
 pub mod a {
     pub mod b { }
 }"#);
@@ -101,13 +84,13 @@ pub mod a {
 
 #[test]
 fn test_private_module() {
-    let docs = make_docs("mod a { }");
+    let docs = source_to_docs("mod a { }");
     assert_paths_found(&docs, vec!["crate"]);
 }
 
 #[test]
 fn test_use_super() {
-    let docs = make_docs(r#"
+    let docs = source_to_docs(r#"
 pub struct MyStruct;
 
 pub mod a {
@@ -125,19 +108,19 @@ pub mod a {
 
 #[test]
 fn test_later_use() {
-    let docs = make_docs(r#"
-mod b {
-    mod a {
+    let docs = source_to_docs(r#"
+pub mod b {
+    pub mod a {
       pub struct MyStruct;
     }
     pub use self::a::MyStruct;
 }
 impl b::MyStruct {
-    fn method_a() {}
+    pub fn method_a() {}
 }
 use b::MyStruct;
 impl MyStruct {
-    fn method_b() {}
+    pub fn method_b() {}
 }
 "#);
     assert_paths_found(&docs, vec!["crate",
@@ -150,7 +133,7 @@ impl MyStruct {
 
 #[test]
 fn test_use_globbed() {
-    let docs = make_docs(r#"
+    let docs = source_to_docs(r#"
 pub mod a {
     pub struct MyStruct;
 }

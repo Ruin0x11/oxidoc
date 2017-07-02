@@ -18,6 +18,12 @@ regex = "0.2"
 cursive = { git = "https://github.com/gyscos/Cursive" }
 lazy_static = "0.2.8"
 ansi_term = "0.9"
+strsim = "0.6.0"
+pulldown-cmark = "0.0"
+term_size = "0.3"
+syntect = "1.7"
+unicode-segmentation = "1.2"
+unicode-width = "0.1"
 
 [lib]
 name = "oxidoc"

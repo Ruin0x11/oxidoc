@@ -137,7 +137,7 @@ impl NewDocTemp_ {
         StoreLocation {
             name: self.name.clone(),
             crate_info: self.crate_info.clone(),
-            mod_path: self.mod_path.tail(),
+            mod_path: self.mod_path.clone(),
             doc_type: self.get_type(),
         }
     }
@@ -167,6 +167,7 @@ pub struct DocLink
 #[derive(Clone, Hash, Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub enum DocType {
     Function,
+    // Method,
     Module,
     Enum,
     Variant,

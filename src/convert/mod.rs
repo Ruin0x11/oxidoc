@@ -24,8 +24,7 @@ pub use convert::wrappers::*;
 pub struct Context {
     pub store_path: PathBuf,
     pub crate_info: CrateInfo,
-    /// Mapping from types to their implementations. Received from the AST
-    /// visitor.
+    /// Mapping from types to their implementations. Received from the AST visitor.
     pub impls_for_ty: HashMap<ModPath, Vec<Impl>>,
 }
 

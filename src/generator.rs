@@ -74,6 +74,7 @@ fn get_crate_info(crate_path: &PathBuf) -> Result<CrateInfo> {
     let info = CrateInfo {
         name: toml_util::get_toml_value(&toml_table, "package", "name")?,
         version: toml_util::get_toml_value(&toml_table, "package", "version")?,
+        lib_path: toml_util::get_toml_value(&toml_table, "lib", "path").ok(),
     };
 
     Ok(info)
@@ -86,26 +87,38 @@ fn cache_doc_for_crate(crate_path: &PathBuf) -> Result<()> {
 
     println!("Generating documentation for {}", &info);
 
-    let parse_session = ParseSess::new();
-
-    // TODO: This has to handle [lib] targets and multiple [[bin]] targets.
-    let mut main_path = crate_path.join("src/lib.rs");
-    if !main_path.exists() {
-        main_path = crate_path.join("src/main.rs");
-        if !main_path.exists() {
-            // TODO: Look for [lib] / [[bin]] targets here
+    let krate = match parse_crate(crate_path, &info) {
+        Ok(k) => k,
+        Err(_) => {
             println!("No crate entry point found \
                       (nonstandard paths are unsupported)");
             return Ok(())
         }
-    }
-    let krate = parse(main_path.as_path(), &parse_session).unwrap();
+    };
 
     let mut store = generate_doc_cache(krate, info)
         .chain_err(|| "Failed to generate doc cache")?;
 
     store.save()
         .chain_err(|| "Couldn't save oxidoc data for module")
+}
+
+fn parse_crate(crate_path: &PathBuf, crate_info: &CrateInfo) -> Result<ast::Crate> {
+    let parse_session = ParseSess::new();
+    let lib_path = crate_info.lib_path.clone().unwrap_or("src/lib.rs".to_string());
+
+    // TODO: This has to handle multiple [[bin]] targets.
+    let mut main_path = crate_path.join(&lib_path);
+    if !main_path.exists() {
+        main_path = crate_path.join("src/main.rs");
+        if !main_path.exists() {
+            // TODO: Look for [[bin]] targets here
+            bail!("No crate entry found");
+        }
+    }
+    let krate = parse(main_path.as_path(), &parse_session).unwrap();
+
+    Ok(krate)
 }
 
 pub fn generate_crate_docs(krate: ast::Crate, crate_info: CrateInfo) -> Result<Vec<NewDocTemp_>> {
@@ -121,18 +134,21 @@ pub fn generate_crate_docs(krate: ast::Crate, crate_info: CrateInfo) -> Result<V
     Ok(v.convert(&context))
 }
 
-/// Generates documentation for the given crate.
-pub fn generate_doc_cache(krate: ast::Crate, crate_info: CrateInfo) -> Result<Store> {
-    let documents = generate_crate_docs(krate, crate_info.clone())?;
-
-    println!("Documents: {}", documents.len());
-
+pub fn make_docset(documents: Vec<NewDocTemp_>) -> Result<Docset> {
     for doc in &documents {
         doc.save()?;
     }
 
     let mut docset = Docset::new();
     docset.add_docs(documents)?;
+
+    Ok(docset)
+}
+
+/// Generates documentation for the given crate.
+pub fn generate_doc_cache(krate: ast::Crate, crate_info: CrateInfo) -> Result<Store> {
+    let documents = generate_crate_docs(krate, crate_info.clone())?;
+    let docset = make_docset(documents)?;
 
     let mut store = Store::load();
     store.add_docset(crate_info, docset);

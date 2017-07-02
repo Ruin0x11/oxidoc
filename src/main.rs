@@ -1,7 +1,5 @@
-#[macro_use] extern crate lazy_static;
 #[macro_use] extern crate error_chain;
 #[macro_use] extern crate log;
-#[macro_use] extern crate serde_derive;
 #[macro_use] extern crate clap;
 extern crate ansi_term;
 extern crate bincode;
@@ -18,9 +16,13 @@ extern crate oxidoc;
 use std::path::PathBuf;
 
 use clap::{App, Arg};
+use oxidoc::driver::Driver;
 use oxidoc::generator;
 use oxidoc::errors::*;
-use oxidoc::tui;
+use oxidoc::store::StoreLocation;
+use oxidoc::markup::Format;
+use oxidoc::store::Store;
+use pager::Pager;
 
 fn app<'a, 'b>() -> App<'a, 'b> {
     App::new(format!("oxidoc {}", crate_version!()))
@@ -81,12 +83,37 @@ fn run() -> Result<()> {
         }
     }
 
-    // Pager::new().setup();
-    // let query = match matches.value_of("query") {
-    //     Some(x) => x,
-    //     None => bail!("No search query was provided.")
-    // };
+    let query = match matches.value_of("query") {
+        Some(x) => x,
+        None => bail!("No search query was provided.")
+    };
 
-    tui::run();
+    // tui::run();
+    page_search_query(query)
+}
+
+fn page_search_query(query: &str) -> Result<()> {
+    let store = Store::load();
+    // search::add_search_paths(store.all_locations());
+
+    let results: Vec<&StoreLocation> = store.lookup_name(query).into_iter().take(10).collect();
+
+    if results.is_empty() {
+        println!("No results for \"{}\".", query);
+        return Ok(());
+    }
+
+    let formatted: Vec<String> = results.into_iter().map(|location| {
+        let result = Driver::get_doc(&location).unwrap();
+
+        result.format().to_string()
+    }).collect();
+
+    Pager::new().setup();
+
+    for result in formatted {
+        println!("{}", result);
+    }
+
     Ok(())
 }

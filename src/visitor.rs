@@ -324,20 +324,14 @@ impl OxidocVisitor {
         let mut module = Module::new(mod_name);
         module.attrs = attrs.clone();
 
-        if let Some(name) = mod_name {
-            self.current_scope.push_string(pprust::ident_to_string(name));
-        } else {
-            self.current_scope.push_string(self.crate_info.name.clone());
-        }
-
+        let current_module_scope = current_module_scope(self, mod_name);
+        self.current_scope.push_string(current_module_scope);
         module.path = self.current_scope.clone();
 
-        // FIXME: add module path to be resolved to
-
-        debug!("path: {}", self.current_scope);
-
         for item in &m.items {
-            self.visit_item(item, &mut module);
+            if should_visit_item(&item) {
+                self.visit_item(item, &mut module);
+            }
         }
 
         self.current_scope.pop();
@@ -355,6 +349,26 @@ impl OxidocVisitor {
                                               &krate.module,
                                               None);
         self.crate_module.is_crate = true;
+    }
+}
+
+fn should_visit_item(item: &ast::Item) -> bool {
+    let is_hidden = item.attrs.lists("doc").has_word("hidden");
+
+    // methods in impls inherit the visibility of the parent
+    let is_public = match item.node {
+        ast::ItemKind::Impl(..) => true,
+        _ => item.vis == ast::Visibility::Public,
+    };
+
+    !is_hidden && is_public
+}
+
+fn current_module_scope(visitor: &OxidocVisitor, mod_name: Option<ast::Ident>) -> String {
+    if let Some(name) = mod_name {
+        pprust::ident_to_string(name)
+    } else {
+        visitor.crate_info.name.clone()
     }
 }
 

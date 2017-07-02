@@ -1,7 +1,3 @@
-mod search;
-mod sorted_result_set;
-mod score;
-
 extern crate cursive;
 
 use std::sync::Mutex;
@@ -15,16 +11,12 @@ use convert::NewDocTemp_;
 use driver::Driver;
 use markup::{MarkupDoc, Format};
 use store::{Store, StoreLocation};
-use self::search::Search;
 use ::errors::*;
-
-lazy_static! {
-    static ref PATHS: Mutex<Vec<StoreLocation>> = Mutex::new(Vec::new());
-}
+use search;
 
 pub fn run() {
     let store = Store::load();
-    PATHS.lock().unwrap().extend(store.all_locations());
+    search::add_search_paths(store.all_locations());
 
     let mut siv = Cursive::new();
 
@@ -35,25 +27,11 @@ pub fn run() {
     siv.run();
 }
 
-fn run_query(query: &str) -> Vec<(String, usize)> {
-    let lines: Vec<String> = PATHS.lock().unwrap().iter().map(|l| l.to_string()).collect();
-
-    let search = Search::blank(&lines, None, 40).append_to_search(query);
-    let mut results = Vec::new();
-    for position in 0..search.visible_limit {
-        match search.result.get(position) {
-            Some(element) => results.push((element.original.clone(), element.idx)),
-            None          => (),
-        }
-    }
-    results
-}
-
 fn update_search_results(siv: &mut Cursive, query: &str) {
     let mut results = siv.find_id::<SelectView<usize>>("results").unwrap();
     results.clear();
 
-    let matches = run_query(query);
+    let matches = search::run_query(query);
 
     for (label, idx) in matches.into_iter() {
         results.add_item(label, idx);
@@ -82,7 +60,6 @@ fn show_search_screen(siv: &mut Cursive) {
     update_search_results(siv, "");
 }
 
-// Let's put the callback in a separate function to keep it clean, but it's not required.
 fn show_next_window(siv: &mut Cursive, idx: &usize) {
     let doc_markup = get_markup(idx);
 
@@ -90,7 +67,8 @@ fn show_next_window(siv: &mut Cursive, idx: &usize) {
 }
 
 fn get_markup(idx: &usize) -> MarkupDoc {
-    let result: NewDocTemp_ = Driver::get_doc(PATHS.lock().unwrap().get(*idx).unwrap()).unwrap();
+    let location = search::get_store_location(*idx);
+    let result: NewDocTemp_ = Driver::get_doc(&location.unwrap()).unwrap();
     result.format()
 }
 

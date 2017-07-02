@@ -15,3 +15,5 @@ extern crate toml;
 extern crate oxidoc;
 
 mod conversion;
+mod search;
+mod util;

@@ -3,16 +3,26 @@ use std::fmt;
 use ansi_term::Style;
 use convert::*;
 use document::{Attributes, FnKind, ModPath};
+use markdown_renderer;
+use term_size;
 
 pub enum Markup {
     Header(String),
     Section(String),
     Block(String),
+    Markdown(String),
     Rule(usize),
     LineBreak,
 }
 
 use self::Markup::*;
+
+fn get_term_width() -> u16 {
+    match term_size::dimensions() {
+        Some((w, _)) => w as u16,
+        None         => 80,
+    }
+}
 
 impl fmt::Display for Markup {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -20,8 +30,12 @@ impl fmt::Display for Markup {
             Header(ref text) => Style::new().bold().paint(format!("==== {}", text)).to_string(),
             Section(ref text) => Style::new().bold().paint(format!("== {}", text)).to_string(),
             Block(ref text) => text.clone(),
+            Markdown(ref md) => {
+                let width = get_term_width();
+                markdown_renderer::render_ansi(md, width)
+            }
             Rule(ref count) => "-".repeat(*count),
-            LineBreak => "\n".to_string()
+            LineBreak => "".to_string()
         };
         write!(f, "{}", string)
     }
@@ -55,10 +69,10 @@ pub trait Format {
 
 impl Format for NewDocTemp_ {
     fn format(&self) -> MarkupDoc {
-        let header = self.mod_path.format();
+        let header = doc_header(self);
         let info = doc_inner_info(self);
         let signature = doc_signature(self);
-        let body = self.attrs.format();
+        let body = doc_body(self);
 
         let mut result = Vec::new();
         result.extend(header.parts);
@@ -76,23 +90,36 @@ impl Format for ModPath {
     }
 }
 
+fn doc_header(data: &NewDocTemp_) -> MarkupDoc {
+    let name = match data.inner_data {
+        DocInnerData::FnDoc(..) => "Function",
+        DocInnerData::StructDoc(..) => "Struct",
+        DocInnerData::ConstDoc(..) => "Constant",
+        DocInnerData::EnumDoc(..) => "Enum",
+        DocInnerData::TraitDoc(..) => "Trait",
+        DocInnerData::TraitItemDoc(..) => "Trait Item",
+        DocInnerData::ModuleDoc(..) => "Module",
+    };
+
+    MarkupDoc::new(vec![Block(format!("({})", data.crate_info)),
+                        Header(format!("{} {}", name, data.mod_path))])
+}
+
 fn doc_inner_info(data: &NewDocTemp_) -> MarkupDoc {
     let markup = match data.inner_data {
         DocInnerData::FnDoc(ref func) => {
             match func.kind {
                 FnKind::MethodFromImpl => Header(format!("Impl on type {}", data.mod_path.parent().unwrap())),
-                _                      => Header(format!("In module {}", data.mod_path.parent().unwrap())),
+                _                      => LineBreak,
             }
-        },
-        DocInnerData::StructDoc(..) |
-        DocInnerData::ConstDoc(..) |
-        DocInnerData::EnumDoc(..) |
-        DocInnerData::TraitDoc(..) => {
-            Header(format!("In module {}", data.mod_path.parent().unwrap()))
         },
         DocInnerData::TraitItemDoc(..) => {
             Header(format!("From trait {}", data.mod_path.parent().unwrap()))
         }
+        DocInnerData::StructDoc(..) |
+        DocInnerData::ConstDoc(..) |
+        DocInnerData::EnumDoc(..) |
+        DocInnerData::TraitDoc(..) |
         DocInnerData::ModuleDoc(..) => LineBreak,
     };
     MarkupDoc::new(vec![markup])
@@ -130,9 +157,11 @@ fn doc_signature(data: &NewDocTemp_) -> MarkupDoc {
 
     MarkupDoc::new(vec![
         Rule(10),
-        Block(format!("{} {}", vis_string, header)),
         LineBreak,
-        Rule(10)])
+        Block(format!("  {} {}", vis_string, header)),
+        LineBreak,
+        Rule(10),
+        LineBreak])
 }
 
 fn trait_item(data: &NewDocTemp_, item: &TraitItem) -> String {
@@ -161,11 +190,14 @@ fn trait_item(data: &NewDocTemp_, item: &TraitItem) -> String {
     item_string
 }
 
+fn doc_body(data: &NewDocTemp_) -> MarkupDoc {
+    data.attrs.format()
+}
+
 impl Format for Attributes {
     fn format(&self) -> MarkupDoc {
         let body = self.doc_strings.join("\n");
-        MarkupDoc::new(vec![LineBreak,
-                            Block(body),
-                            LineBreak])
+
+        MarkupDoc::new(vec![Markdown(body)])
     }
 }
