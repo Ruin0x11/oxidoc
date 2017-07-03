@@ -5,11 +5,12 @@ extern crate ansi_term;
 extern crate bincode;
 extern crate cursive;
 extern crate env_logger;
-extern crate pager;
 extern crate regex;
 extern crate serde;
 extern crate syntex_syntax as syntax;
 extern crate toml;
+
+#[cfg(unix)] extern crate pager;
 
 extern crate oxidoc;
 
@@ -22,7 +23,6 @@ use oxidoc::errors::*;
 use oxidoc::store::StoreLocation;
 use oxidoc::markup::Format;
 use oxidoc::store::Store;
-use pager::Pager;
 
 fn app<'a, 'b>() -> App<'a, 'b> {
     App::new(format!("oxidoc {}", crate_version!()))
@@ -100,6 +100,16 @@ fn run() -> Result<()> {
     page_search_query(query)
 }
 
+#[cfg(unix)]
+fn setup_pager() {
+    pager::Pager::new().setup();
+}
+
+#[cfg(not(unix))]
+fn setup_pager() {
+
+}
+
 fn page_search_query(query: &str) -> Result<()> {
     let store = Store::load();
     // search::add_search_paths(store.all_locations());
@@ -117,7 +127,7 @@ fn page_search_query(query: &str) -> Result<()> {
         result.format().to_string()
     }).collect();
 
-    Pager::new().setup();
+    setup_pager();
 
     for result in formatted {
         println!("{}", result);

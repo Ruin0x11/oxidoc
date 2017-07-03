@@ -13,7 +13,6 @@ clap = "2.25"
 error-chain = "0.10.0"
 log = "0.3"
 env_logger = "0.3"
-pager = { version = "0.10.0", git = "https://gitlab.com/Ruin0x11/pager-rs/" }
 regex = "0.2"
 lazy_static = "0.2.8"
 ansi_term = "0.9"
@@ -29,6 +28,9 @@ html2runes = { git = "https://github.com/Ruin0x11/html2runes" }
 version = "0.6.0"
 default-features = false
 features = ["pancurses-backend"]
+
+[target.'cfg(unix)'.dependencies]
+pager = { version = "0.10.0", git = "https://gitlab.com/Ruin0x11/pager-rs/" }
 
 [lib]
 name = "oxidoc"
