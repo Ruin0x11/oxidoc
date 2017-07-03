@@ -98,19 +98,14 @@ pub fn serialize_object<S, T>(data: &S, path: T) -> Result<()>
 
 type CrateVersion = String;
 type CrateName = String;
-type DocumentCorpus = HashMap<CrateName, HashMap<CrateVersion, Docset>>;
-type CrateVersions = HashMap<CrateName, HashSet<CrateVersion>>;
+type CrateVersions = HashMap<CrateVersion, Docset>;
+type DocumentCorpus = HashMap<CrateName, CrateVersions>;
 type ModuleExpansions = HashMap<String, HashSet<String>>;
 
 #[derive(Serialize, Deserialize)]
 pub struct Store {
     /// "serde" => "1.0.0" => Docset { /* ... */}
     items: DocumentCorpus,
-
-
-    /// Map from crate name to its documented versions
-    /// "serde" => ["1.0.0", ...]
-    versions: CrateVersions,
 
     /// A map from individual module path segments to fully resolved module paths that use them.
     /// "vec" => ["std::vec::Vec", ...]
@@ -121,7 +116,6 @@ impl Store {
     pub fn new() -> Self {
         Store {
             items: HashMap::new(),
-            versions: HashMap::new(),
             module_expansions: HashMap::new(),
         }
     }
@@ -144,10 +138,7 @@ impl Store {
     }
 
     pub fn add_docset(&mut self, crate_info: CrateInfo, docset: Docset) {
-        let mut versions = self.versions.entry(crate_info.name.clone()).or_insert(HashSet::new());
-
         // TODO: Any way to remove old module expansions if docset is regenerated?
-        versions.insert(crate_info.version.clone());
         for doc in docset.documents.values() {
             for segment in doc.mod_path.0.iter() {
                 let mod_path = doc.mod_path.to_string().to_lowercase();
@@ -183,20 +174,17 @@ impl Store {
             let krate_name = mat.split("::").next().unwrap().to_string();
 
             // TODO: select based on latest version
-            let res: Option<&StoreLocation> = match self.versions.get(&krate_name) {
-                Some(v) => {
-                    let version = v.iter().next().unwrap().clone();
-                    match self.items.get(&krate_name) {
-                        Some(versions) => {
-                            versions.get(&version).and_then(|docset| {
-                                let path = ModPath::from(mat.clone()).tail().to_string();
-                                docset.documents.get(&path)
-                            })
-                        },
-                        None => None,
-                    }
+            let res: Option<&StoreLocation> =  {
+                match self.items.get(&krate_name) {
+                    Some(krate_versions) => {
+                        let version = latest_version(krate_versions).unwrap();
+                        krate_versions.get(version).and_then(|docset| {
+                            let path = ModPath::from(mat.clone()).tail().to_string();
+                            docset.documents.get(&path)
+                        })
+                    },
+                    None => None,
                 }
-                None => None,
             };
 
             if let Some(loc) = res {
@@ -209,6 +197,19 @@ impl Store {
 
         results
     }
+}
+
+fn latest_version(versions: &CrateVersions) -> Option<&CrateVersion> {
+    let mut max = 0;
+    let mut res = None;
+    for version in versions.keys() {
+        let hash = version_number_hash(version);
+        if hash > max {
+            res = Some(version);
+            max = hash;
+        }
+    }
+    res
 }
 
 /// Returns the module paths which contain all the provided path segments
@@ -235,25 +236,6 @@ fn get_all_matching_paths(query: String,
     result
 }
 
-fn module_path_expansions(path: &str) -> HashSet<String> {
-    let mut parts = path.split("::");
-
-    let mut current = match parts.next() {
-        Some(p) => p.to_string(),
-        None    => return HashSet::new(),
-    };
-
-    let mut result = HashSet::new();
-    result.insert(current.clone());
-
-    for part in parts {
-        current.push_str(&format!("::{}", part));
-        result.insert(current.clone());
-    }
-
-    result
-}
-
 fn intersect(target: Vec<String>, other: &HashSet<String>) -> Vec<String> {
     let mut common = Vec::new();
     let mut v_other: Vec<_> = other.iter().collect();
@@ -268,8 +250,15 @@ fn intersect(target: Vec<String>, other: &HashSet<String>) -> Vec<String> {
     common
 }
 
-fn compare_version_numbers(first: &str, second: &str) -> Ordering {
-    
+fn version_number_hash(version: &str) -> u64 {
+    let slice: Vec<String> = version.split(".").map(|s| s.to_string()).collect();
+    if slice.len() != 3 {
+        return 0;
+    }
+    let a = slice[0].parse::<u64>().unwrap();
+    let b = slice[1].parse::<u64>().unwrap();
+    let c = slice[2].parse::<u64>().unwrap();
+    (a << 16) + (b << 8) + c
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -353,16 +342,27 @@ mod tests {
     #[test]
     fn test_store_loc_to_path() {
         let loc = StoreLocation {
-            name: "TEST".to_string(),
+            name: "Test".to_string(),
             crate_info: CrateInfo {
                 name: "test".to_string(),
                 version: "0.1.0".to_string(),
                 lib_path: None,
             },
-            mod_path: ModPath::from("{{root}}::crate::mod".to_string()),
-            doc_type: DocType::Const,
+            mod_path: ModPath::from("crate::thing".to_string()),
+            doc_type: DocType::Struct,
         };
 
-        assert_eq!(loc.to_filepath(), PathBuf::from("test-0.1.0/crate/mod/TEST/cdesc-TEST.odoc"));
+        let path = loc.to_filepath().display().to_string();
+        assert!(path.contains("test-0.1.0/crate/thing/sdesc-Test.odoc"), "{}", path);
+    }
+
+    #[test]
+    fn test_compare_version_numbers() {
+        let assert_second_newer = |a, b| assert!(version_number_hash(a) < version_number_hash(b),
+                                                 "{} {}", a, b);
+        assert_second_newer("0.1.0", "0.2.0");
+        assert_second_newer("0.1.0", "1.0.0");
+        assert_second_newer("0.1.0", "1.0.1");
+        assert_second_newer("0.0.1", "0.1.0");
     }
 }
