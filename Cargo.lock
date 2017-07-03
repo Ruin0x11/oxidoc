@@ -5,7 +5,7 @@ dependencies = [
  "ansi_term 0.9.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "bincode 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "clap 2.25.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "cursive 0.6.0 (git+https://github.com/gyscos/Cursive)",
+ "cursive 0.6.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "env_logger 0.3.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "error-chain 0.10.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "html2runes 1.0.1 (git+https://github.com/Ruin0x11/html2runes)",
@@ -168,12 +168,12 @@ dependencies = [
 [[package]]
 name = "cursive"
 version = "0.6.0"
-source = "git+https://github.com/gyscos/Cursive#399f186b74de22f02e96522354c8096da0b0c822"
+source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
- "ncurses 5.86.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "num 0.1.39 (registry+https://github.com/rust-lang/crates.io-index)",
  "odds 0.2.25 (registry+https://github.com/rust-lang/crates.io-index)",
  "owning_ref 0.2.4 (registry+https://github.com/rust-lang/crates.io-index)",
+ "pancurses 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "toml 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "unicode-segmentation 1.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "unicode-width 0.1.4 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -472,6 +472,26 @@ version = "0.10.0"
 source = "git+https://gitlab.com/Ruin0x11/pager-rs/#798d740c309b72b89f43859910ccece0ddd498f5"
 dependencies = [
  "errno 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "libc 0.2.24 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "pancurses"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "libc 0.2.24 (registry+https://github.com/rust-lang/crates.io-index)",
+ "log 0.3.8 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ncurses 5.86.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "pdcurses-sys 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "pdcurses-sys"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "gcc 0.3.51 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.2.24 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
@@ -973,7 +993,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 "checksum chrono 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)" = "158b0bd7d75cbb6bf9c25967a48a2e9f77da95876b858eadfabaa99cd069de6e"
 "checksum clap 2.25.0 (registry+https://github.com/rust-lang/crates.io-index)" = "867a885995b4184be051b70a592d4d70e32d7a188db6e8dff626af286a962771"
 "checksum cmake 0.1.24 (registry+https://github.com/rust-lang/crates.io-index)" = "b8ebbb35d3dc9cd09497168f33de1acb79b265d350ab0ac34133b98f8509af1f"
-"checksum cursive 0.6.0 (git+https://github.com/gyscos/Cursive)" = "<none>"
+"checksum cursive 0.6.0 (registry+https://github.com/rust-lang/crates.io-index)" = "54598f27a2cb466da560ec77087ca9073860af1bf0b0300cfa9d0dab93deb4d1"
 "checksum dbghelp-sys 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)" = "97590ba53bcb8ac28279161ca943a924d1fd4a8fb3fa63302591647c4fc5b850"
 "checksum debug_unreachable 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)" = "9a032eac705ca39214d169f83e3d3da290af06d8d1d344d1baad2fd002dca4b3"
 "checksum dtoa 0.4.1 (registry+https://github.com/rust-lang/crates.io-index)" = "80c8b71fd71146990a9742fc06dcbbde19161a267e0ad4e572c35162f4578c90"
@@ -1011,6 +1031,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 "checksum onig_sys 63.0.2 (registry+https://github.com/rust-lang/crates.io-index)" = "531682ab45a2cd40eff91f29340dae975f25336d2b61e624adabed39e61d7fb3"
 "checksum owning_ref 0.2.4 (registry+https://github.com/rust-lang/crates.io-index)" = "9d52571ddcb42e9c900c901a18d8d67e393df723fcd51dd59c5b1a85d0acb6cc"
 "checksum pager 0.10.0 (git+https://gitlab.com/Ruin0x11/pager-rs/)" = "<none>"
+"checksum pancurses 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)" = "f88b65d6c3270b130a648d46d7de9d135516710619795a3c8b912bf1785f229e"
+"checksum pdcurses-sys 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)" = "fc2afa9ac25ddaa04ce736b1525bff865beaf219bb2bb86a5b3354f34a5173b1"
 "checksum phf 0.7.21 (registry+https://github.com/rust-lang/crates.io-index)" = "cb325642290f28ee14d8c6201159949a872f220c62af6e110a56ea914fbe42fc"
 "checksum phf_codegen 0.7.21 (registry+https://github.com/rust-lang/crates.io-index)" = "d62594c0bb54c464f633175d502038177e90309daf2e0158be42ed5f023ce88f"
 "checksum phf_generator 0.7.21 (registry+https://github.com/rust-lang/crates.io-index)" = "6b07ffcc532ccc85e3afc45865469bf5d9e4ef5bfcf9622e3cfe80c2d275ec03"

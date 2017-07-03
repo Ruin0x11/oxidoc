@@ -15,7 +15,6 @@ log = "0.3"
 env_logger = "0.3"
 pager = { version = "0.10.0", git = "https://gitlab.com/Ruin0x11/pager-rs/" }
 regex = "0.2"
-cursive = { git = "https://github.com/gyscos/Cursive" }
 lazy_static = "0.2.8"
 ansi_term = "0.9"
 strsim = "0.6.0"
@@ -25,6 +24,11 @@ syntect = "1.7"
 unicode-segmentation = "1.1"
 unicode-width = "0.1"
 html2runes = { git = "https://github.com/Ruin0x11/html2runes" }
+
+[dependencies.cursive]
+version = "0.6.0"
+default-features = false
+features = ["pancurses-backend"]
 
 [lib]
 name = "oxidoc"
