@@ -1,18 +1,12 @@
 use std::collections::HashMap;
 use std::fmt::{self, Display};
-use std::fs::{File, create_dir_all};
-use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::slice;
 
-use syntax::ast::{self, Name};
+use syntax::ast;
 use syntax::abi;
 use syntax::codemap::{Span};
 use syntax::print::pprust;
-use paths;
-use store::Store;
-
-use ::errors::*;
 
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
 pub enum FnKind {

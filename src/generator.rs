@@ -1,7 +1,7 @@
 use std;
 use std::env;
 use std::path::{Path, PathBuf};
-use std::fs::remove_dir_all;
+use std::fs::{read_dir, remove_dir_all};
 
 use store::Store;
 use syntax::ast;
@@ -31,9 +31,19 @@ fn parse<'a, T: ?Sized + AsRef<Path>>(path: &T,
     }
 }
 
-pub fn generate_all() -> Result<()> {
+pub fn generate_all_docs() -> Result<()> {
     debug!("Regenerating all documentation.");
+    generate_crate_registry_docs()?;
 
+    if generate_stdlib_docs().is_err() {
+        println!("The environment variable RUST_SRC_PATH was not set or malformed. Documentation \
+                  for std won't be generated.");
+    }
+
+    Ok(())
+}
+
+pub fn generate_crate_registry_docs() -> Result<()> {
     let home_dir: PathBuf;
     if let Some(x) = env::home_dir() {
         home_dir = x
@@ -48,16 +58,43 @@ pub fn generate_all() -> Result<()> {
     for src_dir in paths::src_iter(true, true)
         .chain_err(|| "Could not iterate cargo registry src directories")?
     {
-        cache_doc_for_crate(&src_dir).
-            chain_err(|| format!("Unable to generate documentation \
-                                  for directory {}",
-                                 &src_dir.display()))?;
+        generate_docs_for_path(src_dir)?;
     }
     Ok(())
 }
 
+pub fn generate_stdlib_docs() -> Result<()> {
+    let rust_src_dir = env::var("RUST_SRC_PATH")
+        .chain_err(|| format!("RUST_SRC_PATH was not set when trying to generate stdlib docs."))?;
 
-pub fn generate(src_dir: PathBuf) -> Result<()> {
+    let stdlib_paths = read_dir(format!("{}/src", rust_src_dir))
+        .chain_err(|| "Couldn't read rust source path")?;
+    let mut paths = Vec::new();
+
+    for src in stdlib_paths {
+        if let Ok(src_dir) = src {
+            if let Ok(metadata) = src_dir.metadata() {
+                if metadata.is_dir() {
+                    let mut path = src_dir.path();
+                    path.push("Cargo.toml");
+                    if path.exists() {
+                        paths.push(src_dir.path());
+                    }
+                }
+            }
+        }
+    }
+
+    for path in paths {
+        // BUG: ICE when attempting to parse rustdoc. Just skip parsing librustdoc.
+        if !path.display().to_string().contains("librustdoc") {
+            generate_docs_for_path(path)?;
+        }
+    }
+    Ok(())
+}
+
+pub fn generate_docs_for_path(src_dir: PathBuf) -> Result<()> {
     cache_doc_for_crate(&src_dir).
         chain_err(|| format!("Unable to generate documentation \
                               for directory {}",
@@ -116,7 +153,11 @@ fn parse_crate(crate_path: &PathBuf, crate_info: &CrateInfo) -> Result<ast::Crat
             bail!("No crate entry found");
         }
     }
-    let krate = parse(main_path.as_path(), &parse_session).unwrap();
+
+    let krate = match parse(main_path.as_path(), &parse_session) {
+        Ok(k) => k,
+        Err(e) => bail!("Failed to parse crate {}: {:?}", crate_info.name, e),
+    };
 
     Ok(krate)
 }

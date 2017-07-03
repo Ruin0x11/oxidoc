@@ -5,11 +5,7 @@ mod sorted_result_set;
 
 use std::sync::Mutex;
 
-use convert::NewDocTemp_;
-use driver::Driver;
-use markup::{MarkupDoc, Format};
-use store::{Store, StoreLocation};
-use ::errors::*;
+use store::StoreLocation;
 use self::search::Search;
 use strsim::levenshtein;
 

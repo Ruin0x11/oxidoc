@@ -10,7 +10,7 @@ dependencies = [
  "error-chain 0.10.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "lazy_static 0.2.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.3.8 (registry+https://github.com/rust-lang/crates.io-index)",
- "pager 0.9.4 (registry+https://github.com/rust-lang/crates.io-index)",
+ "pager 0.10.0 (git+https://gitlab.com/Ruin0x11/pager-rs/)",
  "pulldown-cmark 0.0.15 (registry+https://github.com/rust-lang/crates.io-index)",
  "regex 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde 0.9.15 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -202,7 +202,7 @@ dependencies = [
 
 [[package]]
 name = "errno"
-version = "0.1.8"
+version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "kernel32-sys 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -405,10 +405,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "pager"
-version = "0.9.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
+version = "0.10.0"
+source = "git+https://gitlab.com/Ruin0x11/pager-rs/#798d740c309b72b89f43859910ccece0ddd498f5"
 dependencies = [
- "errno 0.1.8 (registry+https://github.com/rust-lang/crates.io-index)",
+ "errno 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.2.24 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
@@ -805,7 +805,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 "checksum dbghelp-sys 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)" = "97590ba53bcb8ac28279161ca943a924d1fd4a8fb3fa63302591647c4fc5b850"
 "checksum dtoa 0.4.1 (registry+https://github.com/rust-lang/crates.io-index)" = "80c8b71fd71146990a9742fc06dcbbde19161a267e0ad4e572c35162f4578c90"
 "checksum env_logger 0.3.5 (registry+https://github.com/rust-lang/crates.io-index)" = "15abd780e45b3ea4f76b4e9a26ff4843258dd8a3eed2775a0e7368c2e7936c2f"
-"checksum errno 0.1.8 (registry+https://github.com/rust-lang/crates.io-index)" = "1e2b2decb0484e15560df3210cf0d78654bb0864b2c138977c07e377a1bae0e2"
+"checksum errno 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)" = "b2c858c42ac0b88532f48fca88b0ed947cad4f1f64d904bcd6c9f138f7b95d70"
 "checksum error-chain 0.10.0 (registry+https://github.com/rust-lang/crates.io-index)" = "d9435d864e017c3c6afeac1654189b06cdb491cf2ff73dbf0d73b0f292f42ff8"
 "checksum flate2 0.2.19 (registry+https://github.com/rust-lang/crates.io-index)" = "36df0166e856739905cd3d7e0b210fe818592211a008862599845e012d8d304c"
 "checksum fnv 1.0.5 (registry+https://github.com/rust-lang/crates.io-index)" = "6cc484842f1e2884faf56f529f960cc12ad8c71ce96cc7abba0a067c98fee344"
@@ -831,7 +831,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 "checksum onig 1.3.0 (registry+https://github.com/rust-lang/crates.io-index)" = "ee619da9cf707b167098e84fb00f10db61d5a662d1d29b59822bcac3a81553dd"
 "checksum onig_sys 63.0.2 (registry+https://github.com/rust-lang/crates.io-index)" = "531682ab45a2cd40eff91f29340dae975f25336d2b61e624adabed39e61d7fb3"
 "checksum owning_ref 0.2.4 (registry+https://github.com/rust-lang/crates.io-index)" = "9d52571ddcb42e9c900c901a18d8d67e393df723fcd51dd59c5b1a85d0acb6cc"
-"checksum pager 0.9.4 (registry+https://github.com/rust-lang/crates.io-index)" = "1770e5f297a433d4698d46a33d11b351662c052428bd7a7a6fadd98b176cfe56"
+"checksum pager 0.10.0 (git+https://gitlab.com/Ruin0x11/pager-rs/)" = "<none>"
 "checksum pkg-config 0.3.9 (registry+https://github.com/rust-lang/crates.io-index)" = "3a8b4c6b8165cd1a1cd4b9b120978131389f64bdaf456435caa41e630edba903"
 "checksum plist 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)" = "1e2f7e9574aabcf57bc5e9f602caabdffffa8179b0c130a039f7895fea3dbdb5"
 "checksum pulldown-cmark 0.0.15 (registry+https://github.com/rust-lang/crates.io-index)" = "378e941dbd392c101f2cb88097fa4d7167bc421d4b88de3ff7dbee503bc3233b"

@@ -3,10 +3,9 @@ use std::char;
 use std::fs;
 use std::path::{PathBuf};
 use std::io;
-use std::io::{BufRead, Cursor, Read, Write};
+use std::io::{BufRead, Cursor, Write};
 use io_support::{self, CharsError, write_char};
 use self::DecodeState::*;
-use ::errors::*;
 
 error_chain! {
     errors {
@@ -178,7 +177,6 @@ pub fn decode_doc_filename(name: &str) -> Result<String> {
 pub fn decode_doc_filename_rw<R: BufRead, W: Write>(reader: R, writer: &mut W) -> Result<()> {
     let mut state: DecodeState = Normal;
     let mut pos = 0;
-    let mut good_pos = 0;
     let mut buf = String::with_capacity(8);
     for c in io_support::chars(reader) {
         let c = match c {
@@ -205,9 +203,6 @@ pub fn decode_doc_filename_rw<R: BufRead, W: Write>(reader: R, writer: &mut W) -
             Numeric | Hex => bail!(ErrorKind::MalformedNumEscape),
         }
         pos += 1;
-        if state == Normal {
-            good_pos = pos;
-        }
     }
     if state != Normal {
         bail!(ErrorKind::PrematureEnd)

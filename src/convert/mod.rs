@@ -15,7 +15,6 @@ use syntax::print::pprust;
 use syntax::ptr::P;
 
 use document::{self, Impl, Ty, Attributes, CrateInfo, ModPath};
-use store::{Docset, Store};
 use visitor::OxidocVisitor;
 
 pub use convert::wrappers::*;

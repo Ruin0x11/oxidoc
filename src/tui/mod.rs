@@ -10,8 +10,7 @@ use cursive::traits::*;
 use convert::NewDocTemp_;
 use driver::Driver;
 use markup::{MarkupDoc, Format};
-use store::{Store, StoreLocation};
-use ::errors::*;
+use store::Store;
 use search;
 
 pub fn run() {

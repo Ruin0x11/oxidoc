@@ -15,7 +15,7 @@ pub fn toml_string_from_file<T: AsRef<Path>>(path: T) -> Result<String> {
     };
     let mut data = String::new();
     file.read_to_string(&mut data)
-        .chain_err(|| format!("Can't read TOML file! {}", path_as.display()));
+        .chain_err(|| format!("Can't read TOML file! {}", path_as.display()))?;
     Ok(data)
 }
 

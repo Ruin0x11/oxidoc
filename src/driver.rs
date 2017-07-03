@@ -13,13 +13,7 @@ mod errors {
     }
 }
 
-fn expand_name(name: &String) -> Result<ModPath> {
-    let segs = ModPath::from(name.clone());
-    Ok(segs)
-}
-
-pub struct Driver {
-}
+pub struct Driver {}
 
 impl Driver {
     pub fn new() -> Driver {

@@ -1,17 +1,11 @@
-use std::cell::RefCell;
 use std::collections::HashMap;
-use std::path::PathBuf;
 
 use syntax::abi;
 use syntax::ast;
 use syntax::print::pprust;
-use syntax::parse::{self, ParseSess};
 use syntax::symbol::keywords;
 
 use document::*;
-
-use errors::*;
-use convert::Context;
 
 /// Visits the AST starting at a crate and creates a tree of documentation
 /// items. These will later be flattened into a single Store so that no
@@ -72,7 +66,7 @@ impl OxidocVisitor {
                 let c = self.visit_impl_const(item, for_path, ty, expr);
                 module.consts.push(c);
             },
-            ast::ImplItemKind::Method(ref sig, ref block) => {
+            ast::ImplItemKind::Method(ref sig, _) => {
                 let f = self.visit_impl_method(item, for_path, sig);
                 module.fns.push(f);
             },

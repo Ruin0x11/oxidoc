@@ -72,10 +72,16 @@ fn run() -> Result<()> {
     if matches.is_present("generate") {
         match matches.value_of("generate") {
             Some("all") => {
-                return generator::generate_all()
+                return generator::generate_all_docs()
+            }
+            Some("crates") => {
+                return generator::generate_crate_registry_docs()
+            }
+            Some("std") => {
+                return generator::generate_stdlib_docs()
             }
             Some(x) => {
-                return generator::generate(PathBuf::from(x))
+                return generator::generate_docs_for_path(PathBuf::from(x))
             },
             None => {
                 bail!("No crate source directory supplied")

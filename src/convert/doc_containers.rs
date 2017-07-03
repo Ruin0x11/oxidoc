@@ -1,12 +1,9 @@
 use store::StoreLocation;
 use std::collections::HashMap;
 use std::fs;
-use std::path::PathBuf;
 use std::fmt::{self, Display};
 
-use bincode::{self, Infinite};
-
-use document::{FnKind, Attributes, CrateInfo, ModPath};
+use document::{Attributes, CrateInfo, ModPath};
 use store;
 
 use convert::wrappers::*;
@@ -43,11 +40,6 @@ impl DocInnerData {
 }
 
 impl NewDocTemp_ {
-    fn get_doc_filename(&self) -> String {
-        let prefix = self.get_type().get_file_prefix().to_string();
-        format!("{}{}.odoc", prefix, self.name)
-    }
-
     pub fn get_type(&self) -> DocType {
         match self.inner_data {
             DocInnerData::FnDoc(..) => {

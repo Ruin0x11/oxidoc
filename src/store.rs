@@ -174,24 +174,24 @@ impl Store {
             let krate_name = mat.split("::").next().unwrap().to_string();
 
             // TODO: select based on latest version
-            let res: Option<&StoreLocation> =  {
-                match self.items.get(&krate_name) {
-                    Some(krate_versions) => {
-                        let version = latest_version(krate_versions).unwrap();
+            let res: Option<&StoreLocation> =
+                if let Some(krate_versions) = self.items.get(&krate_name) {
+                    if let Some(version) = latest_version(krate_versions) {
                         krate_versions.get(version).and_then(|docset| {
                             let path = ModPath::from(mat.clone()).tail().to_string();
                             docset.documents.get(&path)
                         })
-                    },
-                    None => None,
-                }
-            };
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
 
             if let Some(loc) = res {
                 results.push(loc);
             }
         }
-
 
         results.sort_by_key(|loc| levenshtein(query, &loc.mod_path.to_string()));
 
@@ -200,13 +200,13 @@ impl Store {
 }
 
 fn latest_version(versions: &CrateVersions) -> Option<&CrateVersion> {
-    let mut max = 0;
+    let mut max = None;
     let mut res = None;
     for version in versions.keys() {
         let hash = version_number_hash(version);
-        if hash > max {
+        if max.map_or(true, |m| hash > m) {
             res = Some(version);
-            max = hash;
+            max = Some(hash);
         }
     }
     res

@@ -8,7 +8,7 @@ use std::fmt;
 use std::borrow::Cow;
 
 use ansi_term::{Style, Colour};
-use ansi_term::{ANSIString, ANSIStrings};
+use ansi_term::ANSIString;
 
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;

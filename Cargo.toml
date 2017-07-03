@@ -13,7 +13,7 @@ clap = "2.20.5"
 error-chain = "0.10.0"
 log = "0.3"
 env_logger = "0.3"
-pager = "0.9.4"
+pager = { version = "0.10.0", git = "https://gitlab.com/Ruin0x11/pager-rs/" }
 regex = "0.2"
 cursive = { git = "https://github.com/gyscos/Cursive" }
 lazy_static = "0.2.8"
