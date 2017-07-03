@@ -397,6 +397,7 @@ mod tests {
         let crate_info = CrateInfo {
             name: "test".to_string(),
             version: "0.1.0".to_string(),
+            lib_path: None,
         };
 
         let context = Context::new(
