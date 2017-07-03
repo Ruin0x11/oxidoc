@@ -18,6 +18,7 @@ extern crate syntect;
 extern crate term_size;
 extern crate unicode_segmentation;
 extern crate unicode_width;
+extern crate html2runes;
 
 pub mod convert;
 pub mod document;

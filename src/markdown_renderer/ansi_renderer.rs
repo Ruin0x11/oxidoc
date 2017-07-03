@@ -6,6 +6,7 @@
 
 use std::borrow::Cow;
 
+use html2runes;
 use pulldown_cmark::{Event, Tag};
 use pulldown_cmark::Event::{Start, End, Text, Html, InlineHtml, SoftBreak, HardBreak,
                             FootnoteReference};
@@ -358,12 +359,9 @@ impl<'a, 'b, I: Iterator<Item = Event<'a>>> Ctx<'a, 'b, I> {
                                 }
                             }
                         }
-                        Html(html) => {
-                            let child = parent.add_text(html);
-                            child.style.fg = DomColor::from_light(TermColor::Red);
-                        }
-                        InlineHtml(html) => {
-                            let child = parent.add_text(html);
+                        Html(html) | InlineHtml(html) => {
+                            let text = html2runes::html_to_text(&html.clone().to_mut());
+                            let child = parent.add_text(Cow::from(text));
                             child.style.fg = DomColor::from_light(TermColor::Red);
                         }
                         SoftBreak => {

@@ -79,7 +79,7 @@ impl Convert<Constness> for ast::Constness {
     }
 }
 
-impl Convert<Visibility> for ast::Visibility{
+impl Convert<Visibility> for ast::Visibility {
     fn convert(&self, _context: &Context) -> Visibility {
         match *self {
             ast::Visibility::Public    => Visibility::Public,

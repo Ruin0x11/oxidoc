@@ -98,7 +98,11 @@ fn doc_header(data: &Documentation) -> MarkupDoc {
         DocInnerData::EnumDoc(..) => "Enum",
         DocInnerData::TraitDoc(..) => "Trait",
         DocInnerData::TraitItemDoc(..) => "Trait Item",
-        DocInnerData::ModuleDoc(..) => "Module",
+        DocInnerData::ModuleDoc(ref module) => if module.is_crate {
+            "Crate"
+        } else {
+            "Module"
+        },
     };
 
     MarkupDoc::new(vec![Block(format!("({})", data.crate_info)),
@@ -132,11 +136,13 @@ fn doc_signature(data: &Documentation) -> MarkupDoc {
     };
 
     let header = match data.inner_data {
+        DocInnerData::ModuleDoc(ref module) => if module.is_crate {
+            return MarkupDoc::new(vec![Rule(10), LineBreak]);
+        } else {
+            format!("mod {}", data.mod_path)
+        },
         DocInnerData::FnDoc(ref func) => {
             format!("fn {} {}", data.name, func.header)
-        },
-        DocInnerData::ModuleDoc(..) => {
-            format!("mod {}", data.mod_path)
         },
         DocInnerData::EnumDoc(..) => {
             format!("enum {}", data.name)
