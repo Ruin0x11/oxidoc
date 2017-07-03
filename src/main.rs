@@ -1,6 +1,9 @@
-#[macro_use] extern crate error_chain;
-#[macro_use] extern crate log;
-#[macro_use] extern crate clap;
+#[macro_use]
+extern crate error_chain;
+#[macro_use]
+extern crate log;
+#[macro_use]
+extern crate clap;
 extern crate ansi_term;
 extern crate bincode;
 extern crate cursive;
@@ -27,21 +30,23 @@ use pager::Pager;
 fn app<'a, 'b>() -> App<'a, 'b> {
     App::new(format!("oxidoc {}", crate_version!()))
         .about("A command line interface to Rustdoc.")
-        .arg(Arg::with_name("version")
-             .short("V")
-             .long("version")
-             .help("Prints version info"))
-        .arg(Arg::with_name("generate")
-             .short("g")
-             .long("generate")
-             .value_name("CRATE_DIR")
-             .help("Generate oxidoc info for the specified crate root directory, 'std' for stdlib \
+        .arg(Arg::with_name("version").short("V").long("version").help(
+            "Prints version info",
+        ))
+        .arg(
+            Arg::with_name("generate")
+                .short("g")
+                .long("generate")
+                .value_name("CRATE_DIR")
+                .help(
+                    "Generate oxidoc info for the specified crate root directory, 'std' for stdlib \
                     (requires RUST_SRC_PATH to be set), 'crates' for all cargo crates or 'all' \
-                    for everything")
-             .takes_value(true)
-             .alias("generate"))
-        .arg(Arg::with_name("query")
-             .index(1))
+                    for everything",
+                )
+                .takes_value(true)
+                .alias("generate"),
+        )
+        .arg(Arg::with_name("query").index(1))
 }
 
 fn main() {
@@ -68,32 +73,22 @@ fn run() -> Result<()> {
     let matches = app().get_matches();
     if matches.is_present("version") {
         println!("oxidoc {}", crate_version!());
-        return Ok(())
+        return Ok(());
     }
 
     if matches.is_present("generate") {
         match matches.value_of("generate") {
-            Some("all") => {
-                return generator::generate_all_docs()
-            }
-            Some("crates") => {
-                return generator::generate_crate_registry_docs()
-            }
-            Some("std") => {
-                return generator::generate_stdlib_docs()
-            }
-            Some(x) => {
-                return generator::generate_docs_for_path(PathBuf::from(x))
-            },
-            None => {
-                bail!("No crate source directory supplied")
-            }
+            Some("all") => return generator::generate_all_docs(),
+            Some("crates") => return generator::generate_crate_registry_docs(),
+            Some("std") => return generator::generate_stdlib_docs(),
+            Some(x) => return generator::generate_docs_for_path(PathBuf::from(x)),
+            None => bail!("No crate source directory supplied"),
         }
     }
 
     let query = match matches.value_of("query") {
         Some(x) => x,
-        None => bail!("No search query was provided.")
+        None => bail!("No search query was provided."),
     };
 
     // tui::run();
@@ -111,13 +106,16 @@ fn page_search_query(query: &str) -> Result<()> {
         return Ok(());
     }
 
-    let formatted: Vec<String> = results.into_iter().map(|location| {
-        let result = Driver::get_doc(&location).unwrap();
+    let formatted: Vec<String> = results
+        .into_iter()
+        .map(|location| {
+            let result = Driver::get_doc(&location).unwrap();
 
-        result.format().to_string()
-    }).collect();
+            result.format().to_string()
+        })
+        .collect();
 
-    Pager::new().setup();
+    Pager::new().with_executable("more -r").setup();
 
     for result in formatted {
         println!("{}", result);

@@ -28,7 +28,7 @@ Provide either an identifier or a partially/fully qualified module path as a sea
 ```
 oxidoc rand
 oxidoc vec::Vec
-oxidoc serde::de::DeserializeOwned    
+oxidoc serde::de::DeserializeOwned
 ```
 
 ## TODO

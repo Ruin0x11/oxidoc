@@ -118,7 +118,6 @@ pub struct DomStyle {
     pub underline: bool,
     pub strikethrough: bool,
     pub italic: bool,
-    pub code: bool, // XXX useless ?
     pub extend: bool,
     pub indent: u16,
     pub align: TextAlign,
@@ -158,6 +157,9 @@ impl DomStyle {
         }
         astyle
     }
+
+    #[cfg(never)]
+    pub fn merge(&mut self, other: DomStyle) -> DomStyle {}
 }
 
 #[derive(Debug, Clone)]
@@ -185,18 +187,20 @@ struct BoxCursor {
 
 impl fmt::Display for BoxCursor {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f,
-               "[{} {}] [{} {} +{} +{}] [+{} +{} -{} -{}]",
-               self.x,
-               self.y,
-               self.container.content.x,
-               self.container.content.y,
-               self.container.content.w,
-               self.container.content.h,
-               self.container.border.top,
-               self.container.border.left,
-               self.container.border.bottom,
-               self.container.border.right)
+        write!(
+            f,
+            "[{} {}] [{} {} +{} +{}] [+{} +{} -{} -{}]",
+            self.x,
+            self.y,
+            self.container.content.x,
+            self.container.content.y,
+            self.container.content.w,
+            self.container.content.h,
+            self.container.border.top,
+            self.container.border.left,
+            self.container.border.bottom,
+            self.container.border.right
+        )
     }
 }
 
@@ -204,6 +208,24 @@ impl fmt::Display for BoxCursor {
 pub struct BoxSize {
     pub content: Rect,
     pub border: Edges,
+}
+
+impl BoxSize {
+    pub fn width_plus_border(&self) -> u16 {
+        self.content.w + self.border.left + self.border.right
+    }
+
+    pub fn height_plus_border(&self) -> u16 {
+        self.content.h + self.border.top + self.border.bottom
+    }
+
+    pub fn right(&self) -> u16 {
+        self.content.x + self.content.w
+    }
+
+    pub fn bottom(&self) -> u16 {
+        self.content.y + self.content.h
+    }
 }
 
 #[derive(Default, Debug, Copy, Clone)]
@@ -261,91 +283,94 @@ impl<'a> DomBox<'a> {
                 match self.children.last() {
                     Some(&DomBox { kind: BoxKind::InlineContainer, .. }) => {}
                     _ => {
-                        self.children
-                            .push(DomBox {
-                                      size: Default::default(),
-                                      kind: BoxKind::InlineContainer,
-                                      style: self.style.clone(),
-                                      children: vec![],
-                                  });
+                        self.children.push(DomBox {
+                            size: Default::default(),
+                            kind: BoxKind::InlineContainer,
+                            style: self.style.clone(),
+                            children: vec![],
+                        });
                     }
                 }
                 self.children.last_mut().unwrap()
             }
         }
     }
+
+    #[cfg(never)]
+    pub fn add_dom(&mut self, dom: DomBox<'a>) -> &mut DomBox<'a> {
+        if dom.is_inline {
+            inline_container = self.get_inline_container();
+            inline_container.push(dom);
+            inline_container.children.last_mut.clone()
+        } else {
+            self.children_push(dom);
+            self.children.last_mut().unwrap()
+        }
+    }
+
     pub fn add_text(&mut self, text: Cow<'a, str>) -> &mut DomBox<'a> {
         let inline_container = self.get_inline_container();
-        inline_container
-            .children
-            .push(DomBox {
-                      size: Default::default(),
-                      kind: BoxKind::Text(text),
-                      style: inline_container.style.clone(),
-                      children: vec![],
-                  });
+        inline_container.children.push(DomBox {
+            size: Default::default(),
+            kind: BoxKind::Text(text),
+            style: inline_container.style.clone(),
+            children: vec![],
+        });
         inline_container.children.last_mut().unwrap()
     }
     pub fn add_inline(&mut self) -> &mut DomBox<'a> {
         let inline_container = self.get_inline_container();
-        inline_container
-            .children
-            .push(DomBox {
-                      size: Default::default(),
-                      kind: BoxKind::Inline,
-                      style: inline_container.style.clone(),
-                      children: vec![],
-                  });
+        inline_container.children.push(DomBox {
+            size: Default::default(),
+            kind: BoxKind::Inline,
+            style: inline_container.style.clone(),
+            children: vec![],
+        });
         inline_container.children.last_mut().unwrap()
     }
     pub fn add_block(&mut self) -> &mut DomBox<'a> {
-        self.children
-            .push(DomBox {
-                      size: Default::default(),
-                      kind: BoxKind::Block,
-                      style: self.style.clone(),
-                      children: vec![],
-                  });
+        self.children.push(DomBox {
+            size: Default::default(),
+            kind: BoxKind::Block,
+            style: self.style.clone(),
+            children: vec![],
+        });
         self.children.last_mut().unwrap()
     }
     pub fn add_header(&mut self, level: u8) -> &mut DomBox<'a> {
-        self.children
-            .push(DomBox {
-                      size: Default::default(),
-                      kind: BoxKind::Header(level),
-                      style: self.style.clone(),
-                      children: vec![],
-                  });
+        self.children.push(DomBox {
+            size: Default::default(),
+            kind: BoxKind::Header(level),
+            style: self.style.clone(),
+            children: vec![],
+        });
         self.children.last_mut().unwrap()
     }
     pub fn add_list(&mut self, start: Option<u16>) -> &mut DomBox<'a> {
-        self.children
-            .push(DomBox {
-                      size: Default::default(),
-                      kind: BoxKind::List(start),
-                      style: self.style.clone(),
-                      children: vec![],
-                  });
+        self.children.push(DomBox {
+            size: Default::default(),
+            kind: BoxKind::List(start),
+            style: self.style.clone(),
+            children: vec![],
+        });
         self.children.last_mut().unwrap()
     }
     pub fn add_bullet(&mut self) -> &mut DomBox<'a> {
-        self.children
-            .push(DomBox {
-                      size: Default::default(),
-                      kind: BoxKind::ListBullet,
-                      style: self.style.clone(),
-                      children: vec![],
-                  });
+        self.children.push(DomBox {
+            size: Default::default(),
+            kind: BoxKind::ListBullet,
+            style: self.style.clone(),
+            children: vec![],
+        });
         self.children.last_mut().unwrap()
     }
     pub fn add_break(&mut self) -> &mut DomBox<'a> {
-        self.children
-            .push(DomBox {
-                      size: Default::default(),
-                      kind: BoxKind::Break,
-                      style: self.style.clone(),
-                      children: vec![],
-                  });
+        self.children.push(DomBox {
+            size: Default::default(),
+            kind: BoxKind::Break,
+            style: self.style.clone(),
+            children: vec![],
+        });
         self.children.last_mut().unwrap()
     }
     pub fn layout(&mut self) {
@@ -356,10 +381,11 @@ impl<'a> DomBox<'a> {
         };
         self.layout_generic(&mut cursor);
     }
-    fn inline_children_loop(&mut self,
-                            res: LayoutRes<DomBox<'a>>,
-                            dorej: bool)
-                            -> LayoutRes<DomBox<'a>> {
+    fn inline_children_loop(
+        &mut self,
+        res: LayoutRes<DomBox<'a>>,
+        dorej: bool,
+    ) -> LayoutRes<DomBox<'a>> {
         let mut res = res;
         let mut subcursor = BoxCursor {
             x: self.size.content.x,
@@ -371,11 +397,11 @@ impl<'a> DomBox<'a> {
             if let BoxKind::Break = self.children[i].kind {
                 self.children.remove(i);
                 res = LayoutRes::CutHere(DomBox {
-                                             kind: self.kind.clone(),
-                                             size: self.size.clone(),
-                                             style: self.style.clone(),
-                                             children: self.children.split_off(i),
-                                         });
+                    kind: self.kind.clone(),
+                    size: self.size.clone(),
+                    style: self.style.clone(),
+                    children: self.children.split_off(i),
+                });
                 break;
             }
             match self.children[i].layout_generic(&mut subcursor) {
@@ -383,11 +409,11 @@ impl<'a> DomBox<'a> {
                 LayoutRes::CutHere(next) => {
                     self.children.insert(i + 1, next);
                     res = LayoutRes::CutHere(DomBox {
-                                                 kind: self.kind.clone(),
-                                                 size: self.size.clone(),
-                                                 style: self.style.clone(),
-                                                 children: self.children.split_off(i + 1),
-                                             });
+                        kind: self.kind.clone(),
+                        size: self.size.clone(),
+                        style: self.style.clone(),
+                        children: self.children.split_off(i + 1),
+                    });
                     break;
                 }
                 LayoutRes::Reject => {
@@ -399,11 +425,11 @@ impl<'a> DomBox<'a> {
                         }
                     } else {
                         res = LayoutRes::CutHere(DomBox {
-                                                     kind: self.kind.clone(),
-                                                     size: self.size.clone(),
-                                                     style: self.style.clone(),
-                                                     children: self.children.split_off(i),
-                                                 });
+                            kind: self.kind.clone(),
+                            size: self.size.clone(),
+                            style: self.style.clone(),
+                            children: self.children.split_off(i),
+                        });
                     }
                     break;
                 }
@@ -432,10 +458,11 @@ impl<'a> DomBox<'a> {
         self.size.content.y = cursor.y + self.size.border.top;
         self.size.content.h = 0;
         self.size.content.w = if cursor.container.content.w - cursor.x +
-                                 cursor.container.content.x >
-                                 self.size.border.left + self.size.border.right {
+            cursor.container.content.x >
+            self.size.border.left + self.size.border.right
+        {
             cursor.container.content.w - cursor.x + cursor.container.content.x -
-            self.size.border.left - self.size.border.right
+                self.size.border.left - self.size.border.right
         } else {
             1
         };
@@ -451,21 +478,15 @@ impl<'a> DomBox<'a> {
                 self.children.remove(i);
                 continue;
             }
-            match self.children[i].layout_generic(&mut subcursor) {
-                LayoutRes::Normal => (),
-                LayoutRes::CutHere(next) => self.children.insert(i + 1, next),
-                LayoutRes::Reject => {
-                    panic!("can't reject a {:?}", self.children[i].kind);
-                }
+
+            self.layout_child(&mut subcursor, i);
+
+            self.size.content.h += self.children[i].size.height_plus_border();
+
+            if self.children[i].size.width_plus_border() > max_width {
+                max_width = self.children[i].size.width_plus_border();
             }
-            self.size.content.h += self.children[i].size.content.h +
-                                   self.children[i].size.border.top +
-                                   self.children[i].size.border.bottom;
-            if self.children[i].size.content.w + self.children[i].size.border.left +
-               self.children[i].size.border.right > max_width {
-                max_width = self.children[i].size.content.w + self.children[i].size.border.left +
-                            self.children[i].size.border.right;
-            }
+
             i += 1;
         }
         if !self.style.extend {
@@ -473,22 +494,33 @@ impl<'a> DomBox<'a> {
         }
         if let BoxKind::ListBullet = self.kind {
             // XXX ugly
-            cursor.x += self.size.content.w + self.size.border.left + self.size.border.right;
+            cursor.x += self.size.width_plus_border();
         } else {
             cursor.x = cursor.container.content.x;
-            cursor.y += self.size.content.h + self.size.border.top + self.size.border.bottom;
+            cursor.y += self.size.height_plus_border();
         }
 
         res
     }
+
+    fn layout_child(&mut self, cursor: &mut BoxCursor, i: usize) {
+        match self.children[i].layout_generic(cursor) {
+            LayoutRes::Normal => (),
+            LayoutRes::CutHere(next) => self.children.insert(i + 1, next),
+            LayoutRes::Reject => {
+                panic!("can't reject a {:?}", self.children[i].kind);
+            }
+        }
+    }
+
     fn layout_list(&mut self, cursor: &mut BoxCursor) -> LayoutRes<DomBox<'a>> {
         let res = LayoutRes::Normal;
-        self.size.content.w = if cursor.container.content.w >
-                                 self.size.border.left + self.size.border.right {
-            cursor.container.content.w - self.size.border.left - self.size.border.right
-        } else {
-            1
-        };
+        self.size.content.w =
+            if cursor.container.content.w > self.size.border.left + self.size.border.right {
+                cursor.container.content.w - self.size.border.left - self.size.border.right
+            } else {
+                1
+            };
         self.size.content.h = 0;
         self.size.content.x = cursor.x + self.size.border.left;
         self.size.content.y = cursor.y + self.size.border.top;
@@ -499,49 +531,33 @@ impl<'a> DomBox<'a> {
         };
         let mut i = 0;
         while i < self.children.len() {
+            self.layout_child(&mut subcursor, i);
             match self.children[i].kind {
-                BoxKind::ListBullet => {
-                    match self.children[i].layout_generic(&mut subcursor) {
-                        LayoutRes::Normal => (),
-                        LayoutRes::CutHere(next) => self.children.insert(i + 1, next),
-                        LayoutRes::Reject => {
-                            panic!("can't reject a {:?}", self.children[i].kind);
-                        }
-                    }
-                }
+                BoxKind::ListBullet => (),
                 BoxKind::Block => {
-                    match self.children[i].layout_generic(&mut subcursor) {
-                        LayoutRes::Normal => (),
-                        LayoutRes::CutHere(next) => self.children.insert(i + 1, next),
-                        LayoutRes::Reject => {
-                            panic!("can't reject a {:?}", self.children[i].kind);
-                        }
-                    }
-                    self.size.content.h += self.children[i].size.content.h +
-                                           self.children[i].size.border.top +
-                                           self.children[i].size.border.bottom;
+                    self.size.content.h += self.children[i].size.height_plus_border();
                 }
                 _ => panic!("can't layout a {:?} in a List", self.children[i].kind),
             }
             i += 1;
         }
-        cursor.y += self.size.content.h + self.size.border.top + self.size.border.bottom;
+        cursor.y += self.size.height_plus_border();
         res
     }
     // this is a line, and when split will be 2 lines
     fn layout_inline_container(&mut self, cursor: &mut BoxCursor) -> LayoutRes<DomBox<'a>> {
         let mut res = LayoutRes::Normal;
-        self.size.content.w = if cursor.container.content.w >
-                                 self.size.border.left + self.size.border.right {
-            cursor.container.content.w - self.size.border.left - self.size.border.right
-        } else {
-            1
-        };
+        self.size.content.w =
+            if cursor.container.content.w > self.size.border.left + self.size.border.right {
+                cursor.container.content.w - self.size.border.left - self.size.border.right
+            } else {
+                1
+            };
         self.size.content.h = 1;
         self.size.content.x = cursor.x + self.size.border.left;
         self.size.content.y = cursor.y + self.size.border.top;
         res = self.inline_children_loop(res, false);
-        cursor.y += self.size.content.h + self.size.border.top + self.size.border.bottom;
+        cursor.y += self.size.height_plus_border();
         res
     }
     // this one can ask to be splitted if needs be, in this case the returned
@@ -552,7 +568,7 @@ impl<'a> DomBox<'a> {
         self.size.content.x = cursor.x + self.size.border.left;
         self.size.content.y = cursor.y + self.size.border.top;
         self.size.content.w = cursor.container.content.w - (cursor.x - cursor.container.content.x) -
-                              (self.size.border.left + self.size.border.right);
+            (self.size.border.left + self.size.border.right);
         match self.kind {
             BoxKind::Text(ref mut text) => {
                 let width = UnicodeWidthStr::width(&text[..]) as u16;
@@ -562,11 +578,11 @@ impl<'a> DomBox<'a> {
                     let pos = findsplit(text, self.size.content.w as usize);
                     let remains = split_at_in_place(text, pos);
                     res = LayoutRes::CutHere(DomBox {
-                                                 kind: BoxKind::Text(remains),
-                                                 size: self.size.clone(),
-                                                 style: self.style.clone(),
-                                                 children: vec![],
-                                             });
+                        kind: BoxKind::Text(remains),
+                        size: self.size.clone(),
+                        style: self.style.clone(),
+                        children: vec![],
+                    });
                 } else {
                     self.size.content.w = width;
                 }
@@ -584,7 +600,7 @@ impl<'a> DomBox<'a> {
 
     pub fn render(&mut self) -> Vec<ANSIString<'a>> {
         let mut strings = Vec::new();
-        for line in 0..(self.size.content.h + self.size.border.top + self.size.border.bottom) {
+        for line in 0..(self.size.height_plus_border()) {
             self.render_line(line, &mut strings);
             strings.push(Style::default().paint("\n"));
         }
@@ -594,11 +610,12 @@ impl<'a> DomBox<'a> {
 
     fn render_line(&self, line: u16, strings: &mut Vec<ANSIString<'a>>) -> (u16, u16) {
         if line < self.size.content.y - self.size.border.top ||
-           line >= self.size.content.y + self.size.content.h + self.size.border.bottom {
+            line >= self.size.bottom() + self.size.border.bottom
+        {
             // out of the box, don't render anything
             return (0, 0);
         }
-        if line < self.size.content.y || line >= self.size.content.y + self.size.content.h {
+        if line < self.size.content.y || line >= self.size.bottom() {
             return self.render_borderline(line, strings);
         }
         self.render_borderside(true, strings);
@@ -608,7 +625,7 @@ impl<'a> DomBox<'a> {
                 let s = self.style.to_ansi().paint(text.to_string());
                 strings.push(s);
                 pos += UnicodeWidthStr::width(&text[..]) as u16;
-                assert!(pos <= self.size.content.x + self.size.content.w);
+                assert!(pos <= self.size.right());
             }
             _ => {
                 for child in &self.children {
@@ -618,30 +635,27 @@ impl<'a> DomBox<'a> {
                         continue;
                     }
                     assert!(start >= pos);
-                    assert!(start + len <= self.size.content.x + self.size.content.w);
+                    assert!(start + len <= self.size.right());
                     if start > pos {
                         self.render_charline(' ', start - pos, Some(insert_point), strings);
                     }
                     pos = start + len;
                 }
-                assert!(pos <= self.size.content.x + self.size.content.w);
+                assert!(pos <= self.size.right());
             }
         }
-        if pos < self.size.content.x + self.size.content.w {
-            self.render_charline(' ',
-                                 self.size.content.x + self.size.content.w - pos,
-                                 None,
-                                 strings);
+        if pos < self.size.right() {
+            self.render_charline(' ', self.size.right() - pos, None, strings);
         }
         self.render_borderside(false, strings);
-        return (self.size.content.x - self.size.border.left,
-                self.size.content.w + self.size.border.left + self.size.border.right);
+        return (
+            self.size.content.x - self.size.border.left,
+            self.size.width_plus_border(),
+        );
     }
     fn render_borderline(&self, line: u16, strings: &mut Vec<ANSIString<'a>>) -> (u16, u16) {
         let is_top = line < self.size.content.y;
-        let mut s = String::with_capacity(((self.size.content.w + self.size.border.left +
-                                            self.size.border.right) *
-                                           4) as usize);
+        let mut s = String::with_capacity(((self.size.width_plus_border()) * 4) as usize);
         for _ in 0..self.size.border.left {
             match self.style.border_type {
                 _ => {
@@ -673,8 +687,10 @@ impl<'a> DomBox<'a> {
         }
         let s = self.style.to_ansi().paint(s);
         strings.push(s);
-        return (self.size.content.x - self.size.border.left,
-                self.size.content.w + self.size.border.left + self.size.border.right);
+        return (
+            self.size.content.x - self.size.border.left,
+            self.size.width_plus_border(),
+        );
     }
     fn render_borderside(&self, is_left: bool, strings: &mut Vec<ANSIString<'a>>) {
         let width = if is_left {
@@ -705,11 +721,13 @@ impl<'a> DomBox<'a> {
         let s = self.style.to_ansi().paint(s);
         strings.push(s);
     }
-    fn render_charline(&self,
-                       c: char,
-                       n: u16,
-                       insert: Option<u16>,
-                       strings: &mut Vec<ANSIString<'a>>) {
+    fn render_charline(
+        &self,
+        c: char,
+        n: u16,
+        insert: Option<u16>,
+        strings: &mut Vec<ANSIString<'a>>,
+    ) {
         let mut s = String::with_capacity((n * 4) as usize);
         for _ in 0..n {
             s.push(c);

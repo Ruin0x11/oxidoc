@@ -73,12 +73,14 @@ impl Format for Documentation {
         let info = doc_inner_info(self);
         let signature = doc_signature(self);
         let body = doc_body(self);
+        let related_items = doc_related_items(self);
 
         let mut result = Vec::new();
         result.extend(header.parts);
         result.extend(info.parts);
         result.extend(signature.parts);
         result.extend(body.parts);
+        result.extend(related_items.parts);
 
         MarkupDoc::new(result)
     }
@@ -87,6 +89,14 @@ impl Format for Documentation {
 impl Format for ModPath {
     fn format(&self) -> MarkupDoc {
         MarkupDoc::new(vec![Header(self.to_string())])
+    }
+}
+
+impl Format for Attributes {
+    fn format(&self) -> MarkupDoc {
+        let body = self.doc_strings.join("\n");
+
+        MarkupDoc::new(vec![Markdown(body)])
     }
 }
 
@@ -200,10 +210,6 @@ fn doc_body(data: &Documentation) -> MarkupDoc {
     data.attrs.format()
 }
 
-impl Format for Attributes {
-    fn format(&self) -> MarkupDoc {
-        let body = self.doc_strings.join("\n");
-
-        MarkupDoc::new(vec![Markdown(body)])
-    }
+fn doc_related_items(data: &Documentation) -> MarkupDoc {
+    MarkupDoc::new(vec![])
 }
