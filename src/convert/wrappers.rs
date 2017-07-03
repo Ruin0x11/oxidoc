@@ -1,8 +1,5 @@
-use serde::ser::{Serialize};
-use serde::de::{Deserialize};
-
 use convert::doc_containers::*;
-use document::{self, NodeId, ModPath};
+use document::{self, ModPath};
 
 #[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub struct Generics {

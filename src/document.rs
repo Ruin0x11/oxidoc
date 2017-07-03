@@ -1,18 +1,12 @@
-use std::fs::{File, create_dir_all};
-use std::io::{Read, Write};
 use std::collections::HashMap;
 use std::fmt::{self, Display};
 use std::path::PathBuf;
+use std::slice;
 
-use serde_json;
-use syntax::ast::{self, Name};
+use syntax::ast;
 use syntax::abi;
 use syntax::codemap::{Span};
 use syntax::print::pprust;
-use paths;
-use store::Store;
-
-use ::errors::*;
 
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
 pub enum FnKind {
@@ -99,14 +93,23 @@ impl ModPath {
         }
     }
 
+    pub fn tail(&self) -> ModPath {
+        let (_, tail) = self.0.split_at(1);
+        ModPath(tail.clone().to_vec())
+    }
+
     pub fn join(first: &ModPath, other: &ModPath) -> ModPath {
         let mut result = first.clone();
         result.0.extend(other.0.iter().cloned());
         result
     }
 
-    pub fn to_path(&self) -> PathBuf {
+    pub fn to_filepath(&self) -> PathBuf {
         PathBuf::from(self.0.iter().fold(String::new(), |res, s| res + &s.identifier.clone() + "/"))
+    }
+
+    pub fn segments(&self) -> slice::Iter<PathSegment> {
+        self.0.iter()
     }
 }
 
@@ -137,21 +140,22 @@ impl Display for ModPath {
 }
 
 /// Holds the name and version of crate for generating doc directory name
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Package {
+#[derive(Clone, Debug, Serialize, Deserialize, Hash, Eq, PartialEq)]
+pub struct CrateInfo {
     pub name: String,
     pub version: String,
+    pub lib_path: Option<String>,
 }
 
-/// Holds the TOML fields we care about when deserializing
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct CrateInfo {
-    pub package: Package,
+impl CrateInfo {
+    pub fn to_path_prefix(&self) -> PathBuf {
+        PathBuf::from(format!("{}-{}", self.name, self.version))
+    }
 }
 
 impl Display for CrateInfo {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}-{}", self.package.name, self.package.version)
+        write!(f, "{}-{}", self.name, self.version)
     }
 }
 
@@ -159,6 +163,63 @@ pub trait Documentable {
     fn get_info(&self, path: &ModPath) -> String;
     fn get_filename(name: String) -> String;
 }
+
+// FIXME: Duplication from librustdoc
+pub struct ListAttributesIter<'a> {
+    attrs: slice::Iter<'a, ast::Attribute>,
+    current_list: slice::Iter<'a, ast::NestedMetaItem>,
+    name: &'a str
+}
+
+impl<'a> Iterator for ListAttributesIter<'a> {
+    type Item = &'a ast::NestedMetaItem;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(nested) = self.current_list.next() {
+            return Some(nested);
+        }
+
+        for attr in &mut self.attrs {
+            if let Some(ref list) = attr.meta_item_list() {
+                if attr.check_name(self.name) {
+                    self.current_list = list.iter();
+                    if let Some(nested) = self.current_list.next() {
+                        return Some(nested);
+                    }
+                }
+            }
+        }
+
+        None
+    }
+}
+
+pub trait AttributesExt {
+    /// Finds an attribute as List and returns the list of attributes nested inside.
+    fn lists<'a>(&'a self, &'a str) -> ListAttributesIter<'a>;
+}
+
+impl AttributesExt for [ast::Attribute] {
+    fn lists<'a>(&'a self, name: &'a str) -> ListAttributesIter<'a> {
+        ListAttributesIter {
+            attrs: self.iter(),
+            current_list: [].iter(),
+            name: name
+        }
+    }
+}
+
+pub trait NestedAttributesExt {
+    /// Returns whether the attribute list contains a specific `Word`
+    fn has_word(self, &str) -> bool;
+}
+
+impl<'a, I: IntoIterator<Item=&'a ast::NestedMetaItem>> NestedAttributesExt for I {
+    fn has_word(self, word: &str) -> bool {
+        self.into_iter().any(|attr| attr.is_word() && attr.check_name(word))
+    }
+}
+
 
 #[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub struct Attributes {
@@ -288,7 +349,6 @@ impl Module {
     pub fn resolve_use(&self, namespaced_path: &ModPath) -> Option<ModPath> {
         let ident = namespaced_path.head()
             .expect("Given path was empty!").identifier;
-        println!("");
         match self.namespaces_to_paths.get(&ident) {
             Some(u) => Some(ModPath::join(&u.parent().expect("Found empty 'use' namespace in module!"), &namespaced_path)),
             None    => None,

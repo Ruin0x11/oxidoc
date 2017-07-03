@@ -1,17 +1,11 @@
-use std::cell::RefCell;
 use std::collections::HashMap;
-use std::path::PathBuf;
 
 use syntax::abi;
 use syntax::ast;
 use syntax::print::pprust;
-use syntax::parse::{self, ParseSess};
 use syntax::symbol::keywords;
 
 use document::*;
-
-use errors::*;
-use convert::Context;
 
 /// Visits the AST starting at a crate and creates a tree of documentation
 /// items. These will later be flattened into a single Store so that no
@@ -72,7 +66,7 @@ impl OxidocVisitor {
                 let c = self.visit_impl_const(item, for_path, ty, expr);
                 module.consts.push(c);
             },
-            ast::ImplItemKind::Method(ref sig, ref block) => {
+            ast::ImplItemKind::Method(ref sig, _) => {
                 let f = self.visit_impl_method(item, for_path, sig);
                 module.fns.push(f);
             },
@@ -86,13 +80,13 @@ impl OxidocVisitor {
         if let ast::TyKind::Path(_, path) = imp.for_.node.clone() {
             let namespaced_path = ModPath::from(path.clone());
             if let Some(full_path) = module.resolve_use(&namespaced_path) {
-                println!("Full path: {}", full_path);
+                debug!("Full path for {}: {}", namespaced_path, full_path);
                 for item in &imp.items {
                     self.visit_impl_item(module, &item, &full_path);
                 }
                 self.impls_for_ty.entry(full_path.clone()).or_insert(Vec::new()).push(imp);
             } else {
-                println!("No type found for impl {}", namespaced_path);
+                debug!("No type found for impl {}", namespaced_path);
             }
         }
     }
@@ -324,25 +318,15 @@ impl OxidocVisitor {
         let mut module = Module::new(mod_name);
         module.attrs = attrs.clone();
 
-        if let Some(name) = mod_name {
-            self.current_scope.push_string(pprust::ident_to_string(name));
-        } else {
-            self.current_scope.push_string(pprust::ident_to_string(keywords::CrateRoot.ident()));
-        }
-
+        let current_module_scope = current_module_scope(self, mod_name);
+        self.current_scope.push_string(current_module_scope);
         module.path = self.current_scope.clone();
 
-        // FIXME: add module path to be resolved to
-
-        debug!("path: {}", self.current_scope);
-
         for item in &m.items {
-            self.visit_item(item, &mut module);
+            if should_visit_item(&item) {
+                self.visit_item(item, &mut module);
+            }
         }
-
-        // TODO: At this point, the items that could have impls will be added to
-        // module.namespaces_to_paths. All the impls will be in a vector. Map
-        // the impls.
 
         self.current_scope.pop();
 
@@ -359,6 +343,33 @@ impl OxidocVisitor {
                                               &krate.module,
                                               None);
         self.crate_module.is_crate = true;
+    }
+}
+
+fn should_visit_item(item: &ast::Item) -> bool {
+    // TODO: Until "pub use" works, public reexports may not be visited, so just visit all modules
+    // to find them.
+    let is_module = match item.node {
+        ast::ItemKind::Mod(..) => true,
+        _ => false,
+    };
+
+    let is_hidden = item.attrs.lists("doc").has_word("hidden");
+
+    // methods in impls inherit the visibility of the parent
+    let is_public = match item.node {
+        ast::ItemKind::Impl(..) => true,
+        _ => item.vis == ast::Visibility::Public,
+    };
+
+    !is_hidden && (is_module || is_public)
+}
+
+fn current_module_scope(visitor: &OxidocVisitor, mod_name: Option<ast::Ident>) -> String {
+    if let Some(name) = mod_name {
+        pprust::ident_to_string(name)
+    } else {
+        visitor.crate_info.name.clone()
     }
 }
 
@@ -385,10 +396,9 @@ mod tests {
         let krate = parse_crate_from_source(source_code, parse_session)?;
 
         let crate_info = CrateInfo {
-            package: Package {
-                name: "test".to_string(),
-                version: "0.1.0".to_string(),
-            }
+            name: "test".to_string(),
+            version: "0.1.0".to_string(),
+            lib_path: None,
         };
 
         let context = Context::new(

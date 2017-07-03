@@ -1,19 +1,14 @@
+use store::StoreLocation;
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::fs;
 use std::fmt::{self, Display};
 
-use serde::ser::{Serialize};
-use serde::de::{Deserialize};
-use syntax::abi;
-use syntax::ast;
-use syntax::print::pprust;
-use syntax::ptr::P;
-
-use document::{self, FnKind, Attributes, CrateInfo, PathSegment, ModPath};
-use store::Store;
-use visitor::OxidocVisitor;
+use document::{Attributes, CrateInfo, ModPath};
+use store;
 
 use convert::wrappers::*;
+use convert::wrappers::TraitItemKind;
+use ::errors::*;
 
 pub use self::DocInnerData::*;
 
@@ -23,18 +18,12 @@ pub type DocRelatedItems = HashMap<DocType, Vec<DocLink>>;
 pub struct Documentation {
     pub name: String,
     pub attrs: Attributes,
+    pub crate_info: CrateInfo,
     pub mod_path: ModPath,
     pub inner_data: DocInnerData,
     pub visibility: Option<Visibility>,
-    // source code reference
-    // References to other documents
+    // TODO: source code reference
     pub links: DocRelatedItems,
-}
-
-impl Display for Documentation {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.render())
-    }
 }
 
 impl Display for Visibility {
@@ -51,84 +40,36 @@ impl DocInnerData {
 }
 
 impl Documentation {
-    fn get_doc_filename(&self) -> String {
-        let prefix = self.inner_data.get_doc_file_prefix();
-        format!("{}{}.odoc", prefix, self.name)
-    }
-
-    fn render(&self) -> String {
-        format!(r#"
-{}
-------------------------------------------------------------------------------
-  {}
-
-------------------------------------------------------------------------------
-
-{}
-
-{}
-"#,
-                self.doc_info(),
-                self.inner_data(),
-                self.docstring(),
-                self.subitems())
-    }
-
-    fn doc_info(&self) -> String {
+    pub fn get_type(&self) -> DocType {
         match self.inner_data {
-            DocInnerData::FnDoc(ref func) => {
-                match func.kind {
-                    FnKind::MethodFromImpl => format!("=== Impl on type {}", self.mod_path.parent().unwrap()),
-                    _ => format!("=== In module {}", self.mod_path.parent().unwrap()),
-                }
+            DocInnerData::FnDoc(..) => {
+                DocType::Function
             },
-            DocInnerData::StructDoc(..) |
-            DocInnerData::ConstDoc(..) |
-            DocInnerData::EnumDoc(..) |
+            DocInnerData::ModuleDoc(..) => {
+                DocType::Module
+            },
+            DocInnerData::EnumDoc(..) => {
+                DocType::Enum
+            },
+            DocInnerData::StructDoc(..) => {
+                DocType::Struct
+            },
+            DocInnerData::ConstDoc(..) => {
+                DocType::Const
+            },
             DocInnerData::TraitDoc(..) => {
-                format!("=== In module {}", self.mod_path.parent().unwrap())
-            },
-            DocInnerData::TraitItemDoc(..) => {
-                format!("=== From trait {}", self.mod_path.parent().unwrap())
-            }
-            DocInnerData::ModuleDoc(ref mod_) => "".to_string(),
-        }
-    }
-
-    fn docstring(&self) -> String {
-        self.attrs.doc_strings.join("\n")
-    }
-
-    fn inner_data(&self) -> String {
-        let vis_string = match self.visibility {
-            Some(ref v) => v.to_string(),
-            None    => "".to_string(),
-        };
-
-        let header = match self.inner_data {
-            DocInnerData::FnDoc(ref func) => {
-                format!("fn {} {}", self.name, func.header)
-            },
-            DocInnerData::ModuleDoc(ref mod_) => {
-                format!("mod {}", self.mod_path)
-            },
-            DocInnerData::EnumDoc(ref enum_) => {
-                format!("enum {}", self.name)
-            },
-            DocInnerData::StructDoc(ref struct_) => {
-                format!("struct {} {{ /* fields omitted */ }}", self.name)
-            },
-            DocInnerData::ConstDoc(ref const_) => {
-                format!("const {}: {} = {}", self.name, const_.ty.name, const_.expr)
-            },
-            DocInnerData::TraitDoc(ref trait_) => {
-                format!("trait {} {{ /* fields omitted */ }}", self.name)
+                DocType::Trait
             },
             DocInnerData::TraitItemDoc(ref item) => {
-                format!("{}", self.trait_item(item))
+                    match item.node {
+                        TraitItemKind::Const(..)  => DocType::TraitItemConst,
+                        TraitItemKind::Method(..) => DocType::TraitItemMethod,
+                        TraitItemKind::Type(..)   => DocType::TraitItemType,
+                        TraitItemKind::Macro(..)  => DocType::TraitItemMacro,
+                    }
             },
-        };
-        format!("{} {}", vis_string, header)
+
+        }
     }
 
     // TODO: Better way for formatting the wrapped types, as pprust does.
@@ -184,31 +125,27 @@ impl Documentation {
         }
     }
 
-    fn trait_item(&self, item: &TraitItem) -> String {
-        let item_string = match item.node {
-            TraitItemKind::Const(ref ty, ref expr) => {
-                let expr_string = match *expr {
-                    Some(ref e) => e.clone(),
-                    None    => "".to_string(),
-                };
-                format!("const {}: {} = {}", self.name, ty.name, expr_string)
-            },
-            TraitItemKind::Method(ref sig) => {
-                format!("fn {} {}", self.name, sig.header)
-            },
-            TraitItemKind::Type(ref ty) => {
-                let ty_string = match *ty {
-                    Some(ref t) => t.name.clone(),
-                    None    => "".to_string(),
-                };
-                format!("type {}", ty_string)
-            },
-            TraitItemKind::Macro(ref mac) => {
-                format!("macro {} {}", self.name, mac)
-            },
-        };
-        let doc = self.attrs.doc_strings.join("\n");
-        format!("  {}\n{}", item_string, doc)
+    pub fn to_store_location(&self) -> StoreLocation {
+        StoreLocation {
+            name: self.name.clone(),
+            crate_info: self.crate_info.clone(),
+            mod_path: self.mod_path.clone(),
+            doc_type: self.get_type(),
+        }
+    }
+
+    pub fn save(&self) -> Result<()> {
+        let location = self.to_store_location();
+        let path = location.to_filepath();
+
+        {
+            let parent_path = path.parent().unwrap();
+
+            fs::create_dir_all(parent_path)
+                .chain_err(|| format!("Failed to create directory {}", parent_path.display()))?;
+        }
+
+        store::serialize_object(self, path)
     }
 }
 
@@ -219,9 +156,10 @@ pub struct DocLink
     pub path: ModPath,
 }
 
-#[derive(Hash, Eq, PartialEq, Debug, Serialize, Deserialize)]
+#[derive(Clone, Hash, Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub enum DocType {
     Function,
+    // Method,
     Module,
     Enum,
     Variant,
@@ -231,8 +169,33 @@ pub enum DocType {
     Trait,
     AssocConst,
     TraitItemMethod,
+    TraitItemConst,
+    TraitItemType,
+    TraitItemMacro,
     AssocType,
     Macro,
+}
+
+impl DocType {
+    pub fn get_file_prefix(&self) -> &str {
+        match *self {
+            DocType::Function => "",
+            DocType::Module => "mdesc-",
+            DocType::Enum => "edesc-",
+            DocType::Variant => "vdesc-",
+            DocType::Struct => "sdesc-",
+            DocType::StructField => "sfdesc-",
+            DocType::Const => "cdesc-",
+            DocType::Trait => "tdesc-",
+            DocType::AssocConst  => &"acdesc-",
+            DocType::TraitItemConst => &"tcdesc-",
+            DocType::TraitItemMethod => &"tmcdesc-",
+            DocType::TraitItemType => &"ttcdesc-",
+            DocType::TraitItemMacro => &"tmdesc-",
+            DocType::AssocType   => &"atdesc-",
+            DocType::Macro  => &"macdesc-",
+        }
+    }
 }
 
 impl Display for DocType {
@@ -247,7 +210,10 @@ impl Display for DocType {
             DocType::Const => "Constants",
             DocType::Trait => "Traits",
             DocType::AssocConst  => &"Associated Constants",
+            DocType::TraitItemConst => &"Trait Constants",
             DocType::TraitItemMethod => &"Trait Methods",
+            DocType::TraitItemType => &"Trait Types",
+            DocType::TraitItemMacro => &"Trait Macros",
             DocType::AssocType   => &"Associated Types",
             DocType::Macro  => &"Macros",
         };
@@ -268,18 +234,4 @@ pub enum DocInnerData {
     //TypedefDoc,
     TraitDoc(Trait),
     TraitItemDoc(TraitItem),
-}
-
-impl DocInnerData {
-    fn get_doc_file_prefix(&self) -> &str {
-        match *self {
-            DocInnerData::ModuleDoc(..) => "mdesc-",
-            DocInnerData::EnumDoc(..)   => "edesc-",
-            DocInnerData::StructDoc(..) => "sdesc-",
-            DocInnerData::ConstDoc(..)  => "cdesc-",
-            DocInnerData::TraitDoc(..)  => "tdesc-",
-            DocInnerData::FnDoc(..) |
-            DocInnerData::TraitItemDoc(..) => "",
-        }
-    }
 }

@@ -1,59 +1,44 @@
 # oxidoc
 `oxidoc` is a command-line interface to Rust documentation.
 
-It is currently in the very early stages. It can provide function signatures for functions that live directly inside modules (not part of a `trait` or `impl`).
+![screenshot](data/screenshot.png)
+
+It is alpha-quality software, so some documentation may not be indexed or other strange things may happen.
 
 ## Building
 Build the crate:
 ```
-cargo build
+cargo build --release
 ```
-Generate documentation for all crates in `~/.cargo/registry/src`:
+In order to generate documentation for the standard library, the `RUST_SRC_PATH` environment variable has to be set with the path of the Rust source code.
+
+Generate documentation for all crates in `~/.cargo/registry/src` and the standard library:
 ```
-cargo run -- -g all
+oxidoc -g all
 ```
-Or generate documentation for the specified crate source directory:
+Generate documentation for the specified crate source directory:
 ```
-cargo run -- -g ~/build/oxidoc/
+oxidoc -g ~/build/oxidoc/
 ```
 
 The generated documentation currently lives in `~/.cargo/registry/doc`.
 
-Currently a name without a path can be used to search though all crates, or a fully qualified path can be provided, to search only inside that crate's module:
+## Usage
+Provide either an identifier or a partially/fully qualified module path as a search query:
 ```
-cargo run get_fn_file
-cargo run oxidoc::store::get_fn_file
+oxidoc rand
+oxidoc vec::Vec
+oxidoc serde::de::DeserializeOwned    
 ```
-
-This provides:
-
-```
-= oxidoc::store::get_fn_file
-
-(from crate oxidoc-0.1.0)
-=== oxidoc::store::get_fn_file()
-------------------------------------------------------------------------------
-  fn get_fn_file(path: &PathBuf, fn_doc: &Function) -> PathBuf
-
-------------------------------------------------------------------------------
-
-Description will go here.
-```
-
-## Notes
-The design and output are heavily borrowed from `ri`. Many things still need to be done before `oxidoc` is truly useful, so contribution is welcomed.
 
 ## TODO
-- Docstrings
-- Documentation for crates, traits, constants, modules, structs, etc.
-- Documentation for `std`
-- Tests
-- Fuzzy matching
+- Documentation for struct/trait subitems
+- Indexing documentation when a type is glob imported from another module
+- Partial/fuzzy identifier matching
 - Searching by type signature
 - Filtering by unsafety/trait
 - Showing lifetime information for module paths
 - Documenting generics
 - Handling non-standard crate entry points
 - Provide web browser fallback when emitting documentation with HTML/embedded images
-- Curses frontend (possibly using [Cursive](https://github.com/gyscos/Cursive))
 - Probably many other things.

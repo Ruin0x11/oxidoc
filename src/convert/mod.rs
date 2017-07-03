@@ -14,18 +14,16 @@ use syntax::ast;
 use syntax::print::pprust;
 use syntax::ptr::P;
 
-use document::{self, NodeId, Impl, Ty, Attributes, CrateInfo, ModPath};
-use store::Store;
+use document::{self, Impl, Ty, Attributes, CrateInfo, ModPath};
 use visitor::OxidocVisitor;
 
-use convert::wrappers::*;
+pub use convert::wrappers::*;
 
 #[derive(Clone)]
 pub struct Context {
     pub store_path: PathBuf,
     pub crate_info: CrateInfo,
-    /// Mapping from types to their implementations. Received from the AST
-    /// visitor.
+    /// Mapping from types to their implementations. Received from the AST visitor.
     pub impls_for_ty: HashMap<ModPath, Vec<Impl>>,
 }
 
@@ -114,30 +112,26 @@ impl Convert<Abi> for abi::Abi {
     }
 }
 
-impl Convert<Store> for OxidocVisitor {
-    fn convert(&self, context: &Context) -> Store {
+impl Convert<Vec<Documentation>> for OxidocVisitor {
+    fn convert(&self, context: &Context) -> Vec<Documentation> {
         debug!("Converting store");
-        let mut store = Store::new(context.store_path.clone());
-
         let documents = self.crate_module.convert(context);
 
-        for doc in &store.documents {
+        for doc in &documents {
             debug!("{:?}", doc);
         }
 
-        store.documents = documents;
-
-        store
+        documents
     }
 }
 
 impl Convert<Vec<Documentation>> for document::Module {
     fn convert(&self, context: &Context) -> Vec<Documentation> {
-        let mut docs: Vec<Documentation> = vec![];
-
         for (ident, path) in self.namespaces_to_paths.iter() {
-            println!("in {:?}, {} => {}", self.ident, ident, path);
+            debug!("in {:?}, {} => {}", self.ident, ident, path);
         }
+
+        let mut docs: Vec<Documentation> = vec![];
 
         docs.extend(self.consts.iter().map(|x| x.convert(context)));
         docs.extend(self.traits.iter().map(|x| x.convert(context)));
@@ -154,13 +148,14 @@ impl Convert<Vec<Documentation>> for document::Module {
 
         let name = match self.ident {
             Some(id) => id.convert(context),
-            None     => context.crate_info.package.name.clone(),
+            None     => context.crate_info.name.clone(),
         };
 
         let mod_doc = Documentation {
             name: name.clone(),
             attrs: self.attrs.convert(context),
             mod_path: self.path.clone(),
+            crate_info: context.crate_info.clone(),
             visibility: Some(self.vis.convert(context)),
             inner_data: ModuleDoc(Module {
                 is_crate: self.is_crate,
@@ -180,6 +175,7 @@ impl Convert<Documentation> for document::Constant {
             name: self.ident.convert(context),
             attrs: self.attrs.convert(context),
             mod_path: self.path.clone(),
+            crate_info: context.crate_info.clone(),
             visibility: Some(self.vis.convert(context)),
             inner_data: ConstDoc(Constant {
                 ty: self.type_.clone(),
@@ -196,6 +192,7 @@ impl Convert<Documentation> for document::Function {
             name: self.ident.convert(context),
             attrs: self.attrs.convert(context),
             mod_path: self.path.clone(),
+            crate_info: context.crate_info.clone(),
             visibility: Some(self.vis.convert(context)),
             inner_data: FnDoc(Function {
                 header: self.decl.convert(context),
@@ -227,6 +224,7 @@ impl Convert<Documentation> for document::Trait {
             name: self.ident.convert(context),
             attrs: self.attrs.convert(context),
             mod_path: self.path.clone(),
+            crate_info: context.crate_info.clone(),
             visibility: Some(self.vis.convert(context)),
             inner_data: TraitDoc(Trait {
                 unsafety: self.unsafety.convert(context),
@@ -242,6 +240,7 @@ impl Convert<Documentation> for document::TraitItem {
             name: self.ident.convert(context),
             attrs: self.attrs.convert(context),
             mod_path: self.path.clone(),
+            crate_info: context.crate_info.clone(),
             visibility: Some(Visibility::Inherited),
             inner_data: TraitItemDoc(TraitItem {
                 node: self.node.convert(context),
@@ -310,7 +309,7 @@ impl Convert<Documentation> for document::Struct {
         if let Some(impls) = context.impls_for_ty.get(&self.path) {
             for impl_ in impls {
                 let impl_links = impl_.convert(context);
-                println!("Impl found for {}!", self.path);
+                debug!("Impl found for {}!", self.path);
                 links.extend(impl_links);
             }
         }
@@ -319,6 +318,7 @@ impl Convert<Documentation> for document::Struct {
             name: self.ident.convert(context),
             attrs: self.attrs.convert(context),
             mod_path: self.path.clone(),
+            crate_info: context.crate_info.clone(),
             visibility: Some(self.vis.convert(context)),
             inner_data: StructDoc(Struct {
                 fields: self.fields.convert(context),
@@ -404,6 +404,7 @@ impl Convert<Documentation> for document::Enum {
             name: self.ident.convert(context),
             attrs: self.attrs.convert(context),
             mod_path: self.path.clone(),
+            crate_info: context.crate_info.clone(),
             visibility: Some(Visibility::Inherited),
             inner_data: EnumDoc(Enum {
                 variants: self.variants.convert(context),
