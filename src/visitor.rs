@@ -376,8 +376,9 @@ fn current_module_scope(visitor: &OxidocVisitor, mod_name: Option<ast::Ident>) -
 #[cfg(test)]
 mod tests {
     use super::*;
-    use env_logger;
+    use ::errors::*;
     use std::collections::HashMap;
+    use syntax::parse::{self, ParseSess};
 
     fn parse_crate_from_source(source_code: &str,
                                parse_session: ParseSess) -> Result<ast::Crate> {
@@ -400,11 +401,6 @@ mod tests {
             version: "0.1.0".to_string(),
             lib_path: None,
         };
-
-        let context = Context::new(
-            PathBuf::from("~/.cargo/registry/doc/test-0.1.0"),
-            crate_info.clone(),
-            HashMap::new());
 
         let mut visitor = OxidocVisitor::new(crate_info);
         visitor.visit_crate(krate);
