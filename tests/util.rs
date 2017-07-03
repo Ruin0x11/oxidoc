@@ -30,7 +30,7 @@ pub fn source_to_docs(docs_str: &str) -> Vec<NewDocTemp_> {
     let crate_info = get_crate_info();
     let l = generator::generate_crate_docs(krate, crate_info).unwrap();
     for i in l.iter() {
-        println!("{}", i.mod_path);
+        debug!("{}", i.mod_path);
     }
     l
 }

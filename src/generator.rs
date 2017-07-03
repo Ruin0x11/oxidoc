@@ -32,7 +32,7 @@ fn parse<'a, T: ?Sized + AsRef<Path>>(path: &T,
 }
 
 pub fn generate_all() -> Result<()> {
-    println!("Regenerating all documentation.");
+    debug!("Regenerating all documentation.");
 
     let home_dir: PathBuf;
     if let Some(x) = env::home_dir() {
@@ -136,6 +136,7 @@ pub fn generate_crate_docs(krate: ast::Crate, crate_info: CrateInfo) -> Result<V
 
 pub fn make_docset(documents: Vec<NewDocTemp_>) -> Result<Docset> {
     for doc in &documents {
+        debug!("p: {}", doc.mod_path);
         doc.save()?;
     }
 

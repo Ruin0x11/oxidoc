@@ -124,14 +124,23 @@ impl<'a, 'b, I: Iterator<Item = Event<'a>>> Ctx<'a, 'b, I> {
                                         child.style.fg = DomColor::from_dark(TermColor::White);
                                         child.style.bg = DomColor::from_dark(TermColor::Black);
                                         child.style.indent = indent + 2;
-                                        self.syntax = self.syntaxes.find_syntax_by_token(&info);
+
+                                        // NOTE: Just assume the language is rust if the language
+                                        // is omitted, since many docs don't have the 'rust' tag in
+                                        // code blocks
+                                        self.syntax = match self.syntaxes.find_syntax_by_token(&info) {
+                                            Some(syn) => Some(syn),
+                                            None => self.syntaxes.find_syntax_by_token("rust"),
+                                        };
+
                                         if let Some(syn) = self.syntax {
                                             self.highline = Some(HighlightLines::new(
                                                 syn,
                                                 &self.themes.themes[self.theme],
                                             ));
+
+                                            self.build_dom(child);
                                         }
-                                        self.build_dom(child);
                                     }
                                     let newline = parent.add_block(); // XXX ugly
                                     newline.add_text(Cow::from(""));
@@ -384,6 +393,5 @@ pub fn push_ansi<'a, I: Iterator<Item = Event<'a>>>(iter: I, width: u16) -> Stri
     root.layout();
     let ansi_strings = root.render();
 
-    let mut result = String::new();
     ansi_strings.into_iter().fold(String::new(), |s, ansi| s + &ansi.to_string())
 }

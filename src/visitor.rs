@@ -86,13 +86,13 @@ impl OxidocVisitor {
         if let ast::TyKind::Path(_, path) = imp.for_.node.clone() {
             let namespaced_path = ModPath::from(path.clone());
             if let Some(full_path) = module.resolve_use(&namespaced_path) {
-                println!("Full path: {}", full_path);
+                debug!("Full path for {}: {}", namespaced_path, full_path);
                 for item in &imp.items {
                     self.visit_impl_item(module, &item, &full_path);
                 }
                 self.impls_for_ty.entry(full_path.clone()).or_insert(Vec::new()).push(imp);
             } else {
-                println!("No type found for impl {}", namespaced_path);
+                debug!("No type found for impl {}", namespaced_path);
             }
         }
     }
@@ -353,6 +353,13 @@ impl OxidocVisitor {
 }
 
 fn should_visit_item(item: &ast::Item) -> bool {
+    // TODO: Until "pub use" works, public reexports may not be visited, so just visit all modules
+    // to find them.
+    let is_module = match item.node {
+        ast::ItemKind::Mod(..) => true,
+        _ => false,
+    };
+
     let is_hidden = item.attrs.lists("doc").has_word("hidden");
 
     // methods in impls inherit the visibility of the parent
@@ -361,7 +368,7 @@ fn should_visit_item(item: &ast::Item) -> bool {
         _ => item.vis == ast::Visibility::Public,
     };
 
-    !is_hidden && is_public
+    !is_hidden && (is_module || is_public)
 }
 
 fn current_module_scope(visitor: &OxidocVisitor, mod_name: Option<ast::Ident>) -> String {

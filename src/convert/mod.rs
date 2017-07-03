@@ -129,7 +129,7 @@ impl Convert<Vec<NewDocTemp_>> for OxidocVisitor {
 impl Convert<Vec<NewDocTemp_>> for document::Module {
     fn convert(&self, context: &Context) -> Vec<NewDocTemp_> {
         for (ident, path) in self.namespaces_to_paths.iter() {
-            println!("in {:?}, {} => {}", self.ident, ident, path);
+            debug!("in {:?}, {} => {}", self.ident, ident, path);
         }
 
         let mut docs: Vec<NewDocTemp_> = vec![];
@@ -310,7 +310,7 @@ impl Convert<NewDocTemp_> for document::Struct {
         if let Some(impls) = context.impls_for_ty.get(&self.path) {
             for impl_ in impls {
                 let impl_links = impl_.convert(context);
-                println!("Impl found for {}!", self.path);
+                debug!("Impl found for {}!", self.path);
                 links.extend(impl_links);
             }
         }

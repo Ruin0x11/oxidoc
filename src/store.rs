@@ -100,7 +100,7 @@ type CrateVersion = String;
 type CrateName = String;
 type DocumentCorpus = HashMap<CrateName, HashMap<CrateVersion, Docset>>;
 type CrateVersions = HashMap<CrateName, HashSet<CrateVersion>>;
-type ModuleSuffixes = HashMap<String, HashSet<String>>;
+type ModuleExpansions = HashMap<String, HashSet<String>>;
 
 #[derive(Serialize, Deserialize)]
 pub struct Store {
@@ -113,8 +113,8 @@ pub struct Store {
     versions: CrateVersions,
 
     /// A map from individual module path segments to fully resolved module paths that use them.
-    /// "vec" => ["std::vec", ...]
-    module_suffixes: ModuleSuffixes,
+    /// "vec" => ["std::vec::Vec", ...]
+    module_expansions: ModuleExpansions,
 }
 
 impl Store {
@@ -122,7 +122,7 @@ impl Store {
         Store {
             items: HashMap::new(),
             versions: HashMap::new(),
-            module_suffixes: HashMap::new(),
+            module_expansions: HashMap::new(),
         }
     }
 
@@ -146,18 +146,17 @@ impl Store {
     pub fn add_docset(&mut self, crate_info: CrateInfo, docset: Docset) {
         let mut versions = self.versions.entry(crate_info.name.clone()).or_insert(HashSet::new());
 
-        if !versions.contains(&crate_info.version) {
-            versions.insert(crate_info.version.clone());
-            for doc in docset.documents.values() {
-                for segment in doc.mod_path.0.iter() {
-                    let mod_path = doc.mod_path.to_string().to_lowercase();
+        // TODO: Any way to remove old module expansions if docset is regenerated?
+        versions.insert(crate_info.version.clone());
+        for doc in docset.documents.values() {
+            for segment in doc.mod_path.0.iter() {
+                let mod_path = doc.mod_path.to_string().to_lowercase();
 
-                    let mut entry = self.module_suffixes
-                        .entry(segment.identifier.to_lowercase())
-                        .or_insert(HashSet::new());
+                let mut entry = self.module_expansions
+                    .entry(segment.identifier.to_lowercase())
+                    .or_insert(HashSet::new());
 
-                    entry.insert(mod_path);
-                }
+                entry.insert(mod_path);
             }
         }
 
@@ -178,11 +177,10 @@ impl Store {
     pub fn lookup_name(&self, query: &str) -> Vec<&StoreLocation> {
         let mut results = Vec::new();
 
-        let matches = get_all_matching_paths(query.to_string(), &self.module_suffixes);
+        let matches = get_all_matching_paths(query.to_string(), &self.module_expansions);
 
         for mat in matches {
             let krate_name = mat.split("::").next().unwrap().to_string();
-            // println!("MATCH: {}", mat);
 
             // TODO: select based on latest version
             let res: Option<&StoreLocation> = match self.versions.get(&krate_name) {
@@ -192,11 +190,6 @@ impl Store {
                         Some(versions) => {
                             versions.get(&version).and_then(|docset| {
                                 let path = ModPath::from(mat.clone()).tail().to_string();
-                                // println!("PATH: \"{}\"", path);
-                                // for (k, v) in docset.documents.iter() {
-                                //      println!("\"{}\" => {:?}", k, v);
-                                // }
-                                // println!("{}", docset.documents.contains_key(&path));
                                 docset.documents.get(&path)
                             })
                         },
@@ -220,17 +213,15 @@ impl Store {
 
 /// Returns the module paths which contain all the provided path segments
 fn get_all_matching_paths(query: String,
-                          module_suffixes: &ModuleSuffixes)
+                          module_expansions: &ModuleExpansions)
                           -> Vec<String> {
     let query_lower = query.to_lowercase();
     let path_segments: Vec<String> = query_lower.split("::").map(|s| s.to_string()).collect();
 
     let mut result = Vec::new();
 
-    println!("suff: {:?}", module_suffixes);
-
     for segment in path_segments.into_iter() {
-        if let Some(matches) = module_suffixes.get(&segment) {
+        if let Some(matches) = module_expansions.get(&segment) {
             if result.is_empty() {
                 result = matches.iter().cloned().collect();
             } else {
@@ -239,16 +230,12 @@ fn get_all_matching_paths(query: String,
         }
     }
 
-    for res in result.iter() {
-        println!("{} contains {}? {}", res, query_lower, res.contains(&query_lower));
-    }
-
     result.retain(|res| res.to_lowercase().contains(&query_lower));
 
     result
 }
 
-fn module_path_suffixes(path: &str) -> HashSet<String> {
+fn module_path_expansions(path: &str) -> HashSet<String> {
     let mut parts = path.split("::");
 
     let mut current = match parts.next() {
@@ -279,6 +266,10 @@ fn intersect(target: Vec<String>, other: &HashSet<String>) -> Vec<String> {
     }
 
     common
+}
+
+fn compare_version_numbers(first: &str, second: &str) -> Ordering {
+    
 }
 
 #[derive(Serialize, Deserialize, Debug)]
