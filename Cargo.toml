@@ -13,7 +13,7 @@ clap = "2.25"
 error-chain = "0.10.0"
 log = "0.3"
 env_logger = "0.3"
-pager = { version = "0.10.0", git = "https://gitlab.com/Ruin0x11/pager-rs/" }
+pager = { version = "0.10.0", git = "https://gitlab.com/Ruin0x11/pager-rs", branch = "specify_pager_executable" }
 regex = "0.2"
 cursive = { git = "https://github.com/gyscos/Cursive" }
 lazy_static = "0.2.8"
@@ -24,7 +24,7 @@ term_size = "0.3"
 syntect = "1.7"
 unicode-segmentation = "1.1"
 unicode-width = "0.1"
-html2runes = { git = "https://github.com/Ruin0x11/html2runes" }
+catmark = { git = "https://github.com/Ruin0x11/catmark", branch = "support_html_rendering" }
 
 [lib]
 name = "oxidoc"

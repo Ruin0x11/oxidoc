@@ -4,6 +4,7 @@ extern crate error_chain;
 extern crate log;
 #[macro_use]
 extern crate clap;
+
 extern crate ansi_term;
 extern crate bincode;
 extern crate cursive;
@@ -13,6 +14,7 @@ extern crate regex;
 extern crate serde;
 extern crate syntex_syntax as syntax;
 extern crate toml;
+extern crate catmark;
 
 extern crate oxidoc;
 
@@ -59,8 +61,6 @@ fn main() {
             error!("caused by: {}", e);
         }
 
-        // The backtrace is not always generated. Try to run this example
-        // with `RUST_BACKTRACE=1`.
         if let Some(backtrace) = e.backtrace() {
             error!("backtrace: {:?}", backtrace);
         }
