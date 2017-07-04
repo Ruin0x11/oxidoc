@@ -32,7 +32,6 @@ pub mod store;
 mod toml_util;
 pub mod tui;
 pub mod visitor;
-pub mod search;
 
 pub mod errors {
     // Create the Error, ErrorKind, ResultExt, and Result types

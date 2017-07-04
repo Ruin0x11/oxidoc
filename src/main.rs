@@ -35,6 +35,9 @@ fn app<'a, 'b>() -> App<'a, 'b> {
         .arg(Arg::with_name("version").short("V").long("version").help(
             "Prints version info",
         ))
+        .arg(Arg::with_name("tui").short("t").long("tui").help(
+            "Starts interactive console user interface",
+        ))
         .arg(
             Arg::with_name("generate")
                 .short("g")
@@ -86,13 +89,16 @@ fn run() -> Result<()> {
         }
     }
 
-    let query = match matches.value_of("query") {
-        Some(x) => x,
-        None => bail!("No search query was provided."),
-    };
+    if matches.is_present("tui") {
+        oxidoc::tui::run()
+    } else {
+        let query = match matches.value_of("query") {
+            Some(x) => x,
+            None => bail!("No search query was provided."),
+        };
 
-    // tui::run();
-    page_search_query(query)
+        page_search_query(query)
+    }
 }
 
 fn page_search_query(query: &str) -> Result<()> {

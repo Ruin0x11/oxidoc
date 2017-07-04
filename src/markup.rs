@@ -1,7 +1,7 @@
 use std::fmt;
 
 use ansi_term::Style;
-use catmark;
+use catmark::{self, OutputKind};
 use convert::*;
 use document::{Attributes, FnKind, ModPath};
 use term_size;
@@ -42,7 +42,7 @@ impl fmt::Display for Markup {
             Block(ref text) => text.clone(),
             Markdown(ref md) => {
                 let width = get_term_width();
-                catmark::render_ansi(md, width)
+                catmark::render_ansi(md, width, OutputKind::Plain)
             }
             Rule(ref count) => "-".repeat(*count),
             LineBreak => "".to_string(),
