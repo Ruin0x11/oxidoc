@@ -42,7 +42,7 @@ impl fmt::Display for Markup {
             Block(ref text) => text.clone(),
             Markdown(ref md) => {
                 let width = get_term_width();
-                catmark::render_ansi(md, width, OutputKind::Plain)
+                catmark::render_ansi(md, width, OutputKind::Color)
             }
             Rule(ref count) => "-".repeat(*count),
             LineBreak => "".to_string(),
