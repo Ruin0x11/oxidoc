@@ -18,11 +18,7 @@ extern crate serde;
 extern crate strsim;
 extern crate syntex_syntax as syntax;
 extern crate toml;
-extern crate pulldown_cmark;
-extern crate syntect;
 extern crate term_size;
-extern crate unicode_segmentation;
-extern crate unicode_width;
 extern crate catmark;
 
 pub mod convert;
