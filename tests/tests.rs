@@ -1,8 +1,9 @@
-#[macro_use] extern crate lazy_static;
-#[macro_use] extern crate error_chain;
-#[macro_use] extern crate log;
-#[macro_use] extern crate serde_derive;
-#[macro_use] extern crate clap;
+#[macro_use]
+extern crate log;
+extern crate lazy_static;
+extern crate error_chain;
+extern crate serde_derive;
+extern crate clap;
 extern crate ansi_term;
 extern crate bincode;
 extern crate cursive;
