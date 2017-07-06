@@ -121,7 +121,15 @@ fn page_search_query(query: &str) -> Result<()> {
         })
         .collect();
 
-    Pager::new().with_executable("more -r").setup();
+    // Linux and BSD systems doesn't support "-r" option but macOS supports
+    // For linux `less` shows better results (with control chars)
+    #[cfg(target_os = "macos")]
+    let executable = "more -r";
+
+    #[cfg(not(target_os = "macos"))]
+    let executable = "less";
+
+    Pager::new().with_executable(executable).setup();
 
     for result in formatted {
         println!("{}", result);
