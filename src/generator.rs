@@ -67,7 +67,7 @@ pub fn generate_stdlib_docs() -> Result<()> {
     let rust_src_dir = env::var("RUST_SRC_PATH")
         .chain_err(|| format!("RUST_SRC_PATH was not set when trying to generate stdlib docs."))?;
 
-    let stdlib_paths = read_dir(format!("{}/src", rust_src_dir))
+    let stdlib_paths = read_dir(rust_src_dir)
         .chain_err(|| "Couldn't read rust source path")?;
     let mut paths = Vec::new();
 
