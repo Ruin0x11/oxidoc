@@ -18,6 +18,7 @@ extern crate catmark;
 
 extern crate oxidoc;
 
+use std::env;
 use std::path::PathBuf;
 
 use clap::{App, Arg};
@@ -101,6 +102,22 @@ fn run() -> Result<()> {
     }
 }
 
+fn get_pager_executable() -> String {
+    if let Ok(pager) = env::var("PAGER") {
+        return pager.to_string();
+    }
+
+    // Linux and BSD systems doesn't support "-r" option but macOS supports
+    // For linux `less` shows better results (with control chars)
+    #[cfg(target_os = "macos")]
+    let executable = "more -r";
+
+    #[cfg(not(target_os = "macos"))]
+    let executable = "less";
+
+    return executable.to_string();
+}
+
 fn page_search_query(query: &str) -> Result<()> {
     let store = Store::load();
     // search::add_search_paths(store.all_locations());
@@ -121,15 +138,9 @@ fn page_search_query(query: &str) -> Result<()> {
         })
         .collect();
 
-    // Linux and BSD systems doesn't support "-r" option but macOS supports
-    // For linux `less` shows better results (with control chars)
-    #[cfg(target_os = "macos")]
-    let executable = "more -r";
+    let executable = get_pager_executable();
 
-    #[cfg(not(target_os = "macos"))]
-    let executable = "less";
-
-    Pager::new().with_executable(executable).setup();
+    Pager::with_pager(&executable).setup();
 
     for result in formatted {
         println!("{}", result);
