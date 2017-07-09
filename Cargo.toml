@@ -29,6 +29,7 @@ path = "src/lib.rs"
 [[bin]]
 name = "oxidoc"
 path = "src/main.rs"
+doc = false
 
 [[test]]
 name = "tests"
