@@ -28,14 +28,6 @@ features = ["pancurses-backend"]
 [target.'cfg(unix)'.dependencies]
 pager = "0.11"
 
-[dependencies.cursive]
-version = "0.6.0"
-default-features = false
-features = ["pancurses-backend"]
-
-[target.'cfg(unix)'.dependencies]
-pager = { version = "0.10.0", git = "https://gitlab.com/Ruin0x11/pager-rs/" }
-
 [lib]
 name = "oxidoc"
 path = "src/lib.rs"

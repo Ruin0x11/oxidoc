@@ -18,9 +18,6 @@ extern crate catmark;
 #[cfg(unix)]
 extern crate pager;
 
-#[cfg(unix)]
-extern crate pager;
-
 extern crate oxidoc;
 
 use std::env;
@@ -125,6 +122,8 @@ fn get_pager_executable() -> String {
 
 #[cfg(unix)]
 fn setup_pager() {
+    use pager::Pager;
+
     let executable = get_pager_executable();
     Pager::with_pager(&executable).setup();
 }
