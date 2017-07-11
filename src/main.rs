@@ -18,6 +18,9 @@ extern crate catmark;
 #[cfg(unix)]
 extern crate pager;
 
+#[cfg(unix)]
+extern crate pager;
+
 extern crate oxidoc;
 
 use std::env;
@@ -30,7 +33,6 @@ use oxidoc::errors::*;
 use oxidoc::store::StoreLocation;
 use oxidoc::markup::Format;
 use oxidoc::store::Store;
-use pager::Pager;
 
 fn app<'a, 'b>() -> App<'a, 'b> {
     App::new(format!("oxidoc {}", crate_version!()))
