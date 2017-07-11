@@ -9,12 +9,14 @@ extern crate ansi_term;
 extern crate bincode;
 extern crate cursive;
 extern crate env_logger;
-extern crate pager;
 extern crate regex;
 extern crate serde;
 extern crate syntex_syntax as syntax;
 extern crate toml;
 extern crate catmark;
+
+#[cfg(unix)]
+extern crate pager;
 
 extern crate oxidoc;
 
@@ -102,6 +104,7 @@ fn run() -> Result<()> {
     }
 }
 
+#[cfg(unix)]
 fn get_pager_executable() -> String {
     if let Ok(pager) = env::var("PAGER") {
         return pager.to_string();
@@ -117,6 +120,16 @@ fn get_pager_executable() -> String {
 
     return executable.to_string();
 }
+
+#[cfg(unix)]
+fn setup_pager() {
+    let executable = get_pager_executable();
+    Pager::with_pager(&executable).setup();
+}
+
+// pager-rs is not supported on Windows at the moment
+#[cfg(not(unix))]
+fn setup_pager() {}
 
 fn page_search_query(query: &str) -> Result<()> {
     let store = Store::load();
@@ -138,9 +151,7 @@ fn page_search_query(query: &str) -> Result<()> {
         })
         .collect();
 
-    let executable = get_pager_executable();
-
-    Pager::with_pager(&executable).setup();
+    setup_pager();
 
     for result in formatted {
         println!("{}", result);

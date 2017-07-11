@@ -13,14 +13,20 @@ clap = "2.25"
 error-chain = "0.10.0"
 log = "0.3"
 env_logger = "0.3"
-pager = "0.11"
 regex = "0.2"
-cursive = { git = "https://github.com/gyscos/Cursive" }
 lazy_static = "0.2.8"
 ansi_term = "0.9"
 strsim = "0.6.0"
 term_size = "0.3"
 catmark = { git = "https://github.com/Ruin0x11/catmark", branch = "support_html_rendering" }
+
+[dependencies.cursive]
+version = "0.6.0"
+default-features = false
+features = ["pancurses-backend"]
+
+[target.'cfg(unix)'.dependencies]
+pager = "0.11"
 
 [lib]
 name = "oxidoc"

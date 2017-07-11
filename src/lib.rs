@@ -12,7 +12,6 @@ extern crate ansi_term;
 extern crate bincode;
 extern crate cursive;
 extern crate env_logger;
-extern crate pager;
 extern crate regex;
 extern crate serde;
 extern crate strsim;
