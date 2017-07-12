@@ -3,8 +3,10 @@ use std::fmt;
 use ansi_term::Style;
 use catmark::{self, OutputKind};
 use convert::*;
-use document::{Attributes, FnKind, ModPath};
 use term_size;
+
+use document::{Attributes, FnKind, ModPath};
+use driver::Driver;
 
 pub enum Markup {
     Header(String),
@@ -108,8 +110,8 @@ impl Format for Attributes {
     }
 }
 
-fn doc_header(data: &Documentation) -> MarkupDoc {
-    let name = match data.inner_data {
+fn doc_header(doc: &Documentation) -> MarkupDoc {
+    let name = match doc.inner_data {
         DocInnerData::FnDoc(..) => "Function",
         DocInnerData::StructDoc(..) => "Struct",
         DocInnerData::ConstDoc(..) => "Constant",
@@ -120,24 +122,24 @@ fn doc_header(data: &Documentation) -> MarkupDoc {
     };
 
     MarkupDoc::new(vec![
-        Block(format!("({})", data.crate_info)),
-        Header(format!("{} {}", name, data.mod_path)),
+        Block(format!("({})", doc.crate_info)),
+        Header(format!("{} {}", name, doc.mod_path)),
     ])
 }
 
-fn doc_inner_info(data: &Documentation) -> MarkupDoc {
-    let markup = match data.inner_data {
+fn doc_inner_info(doc: &Documentation) -> MarkupDoc {
+    let markup = match doc.inner_data {
         DocInnerData::FnDoc(ref func) => {
             match func.kind {
                 FnKind::MethodFromImpl => Header(format!(
                     "Impl on type {}",
-                    data.mod_path.parent().unwrap()
+                    doc.mod_path.parent().unwrap()
                 )),
                 _ => LineBreak,
             }
         }
         DocInnerData::TraitItemDoc(..) => {
-            Header(format!("From trait {}", data.mod_path.parent().unwrap()))
+            Header(format!("From trait {}", doc.mod_path.parent().unwrap()))
         }
         DocInnerData::StructDoc(..) |
         DocInnerData::ConstDoc(..) |
@@ -148,29 +150,33 @@ fn doc_inner_info(data: &Documentation) -> MarkupDoc {
     MarkupDoc::new(vec![markup])
 }
 
-fn doc_signature(data: &Documentation) -> MarkupDoc {
-    let vis_string = match data.visibility {
+fn header_string(doc: &Documentation) -> String {
+    match doc.inner_data {
+        DocInnerData::ModuleDoc(..) => format!("mod {}", doc.mod_path),
+        DocInnerData::FnDoc(ref func) => format!("fn {} {}", doc.name, func.header),
+        DocInnerData::EnumDoc(..) => format!("enum {}", doc.name),
+        DocInnerData::StructDoc(..) => format!("struct {} {{ /* fields omitted */ }}", doc.name),
+        DocInnerData::ConstDoc(ref const_) => {
+            format!("const {}: {} = {}", doc.name, const_.ty.name, const_.expr)
+        }
+        DocInnerData::TraitDoc(..) => format!("trait {} {{ /* fields omitted */ }}", doc.name),
+        DocInnerData::TraitItemDoc(ref item) => format!("{}", trait_item(doc, item)),
+    }
+}
+
+fn doc_signature(doc: &Documentation) -> MarkupDoc {
+    if let DocInnerData::ModuleDoc(ref module) = doc.inner_data {
+        if module.is_crate {
+            return MarkupDoc::new(vec![Rule(10), LineBreak]);
+        }
+    }
+
+    let vis_string = match doc.visibility {
         Some(ref v) => v.to_string(),
         None => "".to_string(),
     };
 
-    let header = match data.inner_data {
-        DocInnerData::ModuleDoc(ref module) => {
-            if module.is_crate {
-                return MarkupDoc::new(vec![Rule(10), LineBreak]);
-            } else {
-                format!("mod {}", data.mod_path)
-            }
-        }
-        DocInnerData::FnDoc(ref func) => format!("fn {} {}", data.name, func.header),
-        DocInnerData::EnumDoc(..) => format!("enum {}", data.name),
-        DocInnerData::StructDoc(..) => format!("struct {} {{ /* fields omitted */ }}", data.name),
-        DocInnerData::ConstDoc(ref const_) => {
-            format!("const {}: {} = {}", data.name, const_.ty.name, const_.expr)
-        }
-        DocInnerData::TraitDoc(..) => format!("trait {} {{ /* fields omitted */ }}", data.name),
-        DocInnerData::TraitItemDoc(ref item) => format!("{}", trait_item(data, item)),
-    };
+    let header = header_string(doc);
 
     MarkupDoc::new(vec![
         Rule(10),
@@ -182,16 +188,16 @@ fn doc_signature(data: &Documentation) -> MarkupDoc {
     ])
 }
 
-fn trait_item(data: &Documentation, item: &TraitItem) -> String {
+fn trait_item(doc: &Documentation, item: &TraitItem) -> String {
     let item_string = match item.node {
         TraitItemKind::Const(ref ty, ref expr) => {
             let expr_string = match *expr {
                 Some(ref e) => e.clone(),
                 None => "".to_string(),
             };
-            format!("const {}: {} = {}", data.name, ty.name, expr_string)
+            format!("const {}: {} = {}", doc.name, ty.name, expr_string)
         }
-        TraitItemKind::Method(ref sig) => format!("fn {} {}", data.name, sig.header),
+        TraitItemKind::Method(ref sig) => format!("fn {} {}", doc.name, sig.header),
         TraitItemKind::Type(ref ty) => {
             let ty_string = match *ty {
                 Some(ref t) => t.name.clone(),
@@ -199,15 +205,38 @@ fn trait_item(data: &Documentation, item: &TraitItem) -> String {
             };
             format!("type {}", ty_string)
         }
-        TraitItemKind::Macro(ref mac) => format!("macro {} {}", data.name, mac),
+        TraitItemKind::Macro(ref mac) => format!("macro {} {}", doc.name, mac),
     };
     item_string
 }
 
-fn doc_body(data: &Documentation) -> MarkupDoc {
-    data.attrs.format()
+fn doc_body(doc: &Documentation) -> MarkupDoc {
+    doc.attrs.format()
 }
 
-fn doc_related_items(data: &Documentation) -> MarkupDoc {
-    MarkupDoc::new(vec![])
+fn related_item(item: &Documentation) -> MarkupDoc {
+    let header = header_string(item);
+
+    let mut markup = vec![Header(header), LineBreak];
+
+    markup.extend(doc_body(item).parts);
+
+    MarkupDoc::new(markup)
+}
+
+fn doc_related_items(doc: &Documentation) -> MarkupDoc {
+    let mut markup = vec![];
+    for (type_, links) in doc.links.iter() {
+        markup.push(Section(type_.to_string()));
+        for link in links.iter() {
+            let item = Driver::get_doc(link);
+            let doc = match item {
+                Ok(i) => related_item(&i),
+                Err(e) => MarkupDoc::new(vec![Block(e.to_string()), Block(format!("{:?}", link))]),
+            };
+            markup.extend(doc.parts);
+        }
+    }
+
+    MarkupDoc::new(markup)
 }

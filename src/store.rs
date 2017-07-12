@@ -14,7 +14,7 @@ use strsim::levenshtein;
 use convert::DocType;
 use document::CrateInfo;
 use document::ModPath;
-use ::errors::*;
+use errors::*;
 
 const STORE_FILENAME: &str = "store";
 
@@ -32,9 +32,7 @@ pub fn get_doc_registry_path() -> Result<PathBuf> {
 pub fn get_crate_doc_path(crate_info: &CrateInfo) -> Result<PathBuf> {
     let registry_path = get_doc_registry_path()?;
 
-    let path = registry_path.join(format!("{}-{}",
-                                          crate_info.name,
-                                          crate_info.version));
+    let path = registry_path.join(format!("{}-{}", crate_info.name, crate_info.version));
     Ok(path)
 }
 
@@ -64,34 +62,41 @@ fn create_or_open_file<T: AsRef<Path>>(path: T) -> Result<File> {
 }
 
 pub fn deserialize_object<S, T>(path: T) -> Result<S>
-    where S: Deserialize,
-          T: AsRef<Path>
+where
+    S: Deserialize,
+    T: AsRef<Path>,
 {
     let path_as = path.as_ref();
     let mut data: Vec<u8> = Vec::new();
-    let mut bincoded_file = File::open(&path_as)
-        .chain_err(|| format!("Could not open file {}", path_as.display()))?;
+    let mut bincoded_file = File::open(&path_as).chain_err(|| {
+        format!("Could not open file {}", path_as.display())
+    })?;
 
-    bincoded_file.read_to_end(&mut data)
-        .chain_err(|| format!("Failed to read file {}", path_as.display()))?;
-    let result = bincode::deserialize(data.as_slice())
-        .chain_err(|| format!("Could not deserialize file at {}", path_as.display()))?;
+    bincoded_file.read_to_end(&mut data).chain_err(|| {
+        format!("Failed to read file {}", path_as.display())
+    })?;
+    let result = bincode::deserialize(data.as_slice()).chain_err(|| {
+        format!("Could not deserialize file at {}", path_as.display())
+    })?;
 
     Ok(result)
 }
 
 pub fn serialize_object<S, T>(data: &S, path: T) -> Result<()>
-    where S: Serialize,
-          T: AsRef<Path>
+where
+    S: Serialize,
+    T: AsRef<Path>,
 {
     let path_as = path.as_ref();
 
-    let data = bincode::serialize(data, Infinite)
-        .chain_err(|| format!("Could not serialize data for {}", path_as.display()))?;
+    let data = bincode::serialize(data, Infinite).chain_err(|| {
+        format!("Could not serialize data for {}", path_as.display())
+    })?;
 
     let mut bincoded_file = create_or_open_file(path_as)?;
-    bincoded_file.write(data.as_slice())
-        .chain_err(|| format!("Failed to write file {}", path_as.display()))?;
+    bincoded_file.write(data.as_slice()).chain_err(|| {
+        format!("Failed to write file {}", path_as.display())
+    })?;
 
     Ok(())
 }
@@ -123,7 +128,7 @@ impl Store {
     pub fn load() -> Self {
         match Store::load_from_disk() {
             Ok(store) => store,
-            Err(_)    => Store::new(),
+            Err(_) => Store::new(),
         }
     }
 
@@ -159,7 +164,13 @@ impl Store {
         let mut results = Vec::new();
         for krate in self.items.values() {
             for version in krate.values() {
-                results.extend(version.documents.values().cloned().collect::<Vec<StoreLocation>>());
+                results.extend(
+                    version
+                        .documents
+                        .values()
+                        .cloned()
+                        .collect::<Vec<StoreLocation>>(),
+                );
             }
         }
         results
@@ -213,9 +224,7 @@ fn latest_version(versions: &CrateVersions) -> Option<&CrateVersion> {
 }
 
 /// Returns the module paths which contain all the provided path segments
-fn get_all_matching_paths(query: String,
-                          module_expansions: &ModuleExpansions)
-                          -> Vec<String> {
+fn get_all_matching_paths(query: String, module_expansions: &ModuleExpansions) -> Vec<String> {
     let query_lower = query.to_lowercase();
     let path_segments: Vec<String> = query_lower.split("::").map(|s| s.to_string()).collect();
 
@@ -270,23 +279,25 @@ pub struct Docset {
 
 impl Docset {
     pub fn new() -> Self {
-        Docset {
-            documents: HashMap::new(),
-        }
+        Docset { documents: HashMap::new() }
     }
 
     pub fn add_docs(&mut self, documents: Vec<Documentation>) -> Result<()> {
         for doc in documents.into_iter() {
             let relative_path = doc.mod_path.tail().to_string();
-            self.documents.insert(relative_path.to_lowercase(), doc.to_store_location());
-            doc.save()
-                .chain_err(|| format!("Could not add doc {} to docset", doc.mod_path))?;
+            self.documents.insert(
+                relative_path.to_lowercase(),
+                doc.to_store_location(),
+            );
+            doc.save().chain_err(|| {
+                format!("Could not add doc {} to docset", doc.mod_path)
+            })?;
         }
         Ok(())
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Eq, PartialEq, Serialize, Deserialize, Clone, Debug)]
 pub struct StoreLocation {
     pub name: String,
     pub crate_info: CrateInfo,
@@ -295,11 +306,7 @@ pub struct StoreLocation {
 }
 
 impl StoreLocation {
-    pub fn new(name: String,
-               crate_info: CrateInfo,
-               mod_path: ModPath,
-               doc_type: DocType) -> Self
-    {
+    pub fn new(name: String, crate_info: CrateInfo, mod_path: ModPath, doc_type: DocType) -> Self {
         StoreLocation {
             name: name,
             crate_info: crate_info,
@@ -320,7 +327,13 @@ impl StoreLocation {
 
 impl fmt::Display for StoreLocation {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{} ({} {})", self.mod_path, self.crate_info.name, self.crate_info.version)
+        write!(
+            f,
+            "{} ({} {})",
+            self.mod_path,
+            self.crate_info.name,
+            self.crate_info.version
+        )
     }
 }
 
@@ -353,13 +366,23 @@ mod tests {
         };
 
         let path = loc.to_filepath().display().to_string();
-        assert!(path.contains("test-0.1.0/crate/thing/sdesc-Test.odoc"), "{}", path);
+        assert!(
+            path.contains("test-0.1.0/crate/thing/sdesc-Test.odoc"),
+            "{}",
+            path
+        );
     }
 
     #[test]
     fn test_compare_version_numbers() {
-        let assert_second_newer = |a, b| assert!(version_number_hash(a) < version_number_hash(b),
-                                                 "{} {}", a, b);
+        let assert_second_newer = |a, b| {
+            assert!(
+                version_number_hash(a) < version_number_hash(b),
+                "{} {}",
+                a,
+                b
+            )
+        };
         assert_second_newer("0.1.0", "0.2.0");
         assert_second_newer("0.1.0", "1.0.0");
         assert_second_newer("0.1.0", "1.0.1");

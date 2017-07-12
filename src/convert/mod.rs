@@ -15,6 +15,7 @@ use syntax::print::pprust;
 use syntax::ptr::P;
 
 use document::{self, Impl, Ty, Attributes, CrateInfo, ModPath};
+use store::StoreLocation;
 use visitor::OxidocVisitor;
 
 pub use convert::wrappers::*;
@@ -28,9 +29,11 @@ pub struct Context {
 }
 
 impl Context {
-    pub fn new(store_path: PathBuf,
-               crate_info: CrateInfo,
-               impls_for_ty: HashMap<ModPath, Vec<Impl>>) -> Self {
+    pub fn new(
+        store_path: PathBuf,
+        crate_info: CrateInfo,
+        impls_for_ty: HashMap<ModPath, Vec<Impl>>,
+    ) -> Self {
         Context {
             store_path: store_path,
             crate_info: crate_info,
@@ -73,7 +76,7 @@ impl Convert<Unsafety> for ast::Unsafety {
 impl Convert<Constness> for ast::Constness {
     fn convert(&self, _context: &Context) -> Constness {
         match *self {
-            ast::Constness::Const    => Constness::Const,
+            ast::Constness::Const => Constness::Const,
             ast::Constness::NotConst => Constness::NotConst,
         }
     }
@@ -82,9 +85,9 @@ impl Convert<Constness> for ast::Constness {
 impl Convert<Visibility> for ast::Visibility {
     fn convert(&self, _context: &Context) -> Visibility {
         match *self {
-            ast::Visibility::Public    => Visibility::Public,
+            ast::Visibility::Public => Visibility::Public,
             ast::Visibility::Inherited => Visibility::Inherited,
-            _                          => Visibility::Private,
+            _ => Visibility::Private,
         }
     }
 }
@@ -92,22 +95,22 @@ impl Convert<Visibility> for ast::Visibility {
 impl Convert<Abi> for abi::Abi {
     fn convert(&self, _context: &Context) -> Abi {
         match *self {
-            abi::Abi::Cdecl             => Abi::Cdecl,
-            abi::Abi::Stdcall           => Abi::Stdcall,
-            abi::Abi::Fastcall          => Abi::Fastcall,
-            abi::Abi::Vectorcall        => Abi::Vectorcall,
-            abi::Abi::Aapcs             => Abi::Aapcs,
-            abi::Abi::Win64             => Abi::Win64,
-            abi::Abi::SysV64            => Abi::SysV64,
-            abi::Abi::PtxKernel         => Abi::PtxKernel,
-            abi::Abi::Msp430Interrupt   => Abi::Msp430Interrupt,
-            abi::Abi::Rust              => Abi::Rust,
-            abi::Abi::C                 => Abi::C,
-            abi::Abi::System            => Abi::System,
-            abi::Abi::RustIntrinsic     => Abi::RustIntrinsic,
-            abi::Abi::RustCall          => Abi::RustCall,
+            abi::Abi::Cdecl => Abi::Cdecl,
+            abi::Abi::Stdcall => Abi::Stdcall,
+            abi::Abi::Fastcall => Abi::Fastcall,
+            abi::Abi::Vectorcall => Abi::Vectorcall,
+            abi::Abi::Aapcs => Abi::Aapcs,
+            abi::Abi::Win64 => Abi::Win64,
+            abi::Abi::SysV64 => Abi::SysV64,
+            abi::Abi::PtxKernel => Abi::PtxKernel,
+            abi::Abi::Msp430Interrupt => Abi::Msp430Interrupt,
+            abi::Abi::Rust => Abi::Rust,
+            abi::Abi::C => Abi::C,
+            abi::Abi::System => Abi::System,
+            abi::Abi::RustIntrinsic => Abi::RustIntrinsic,
+            abi::Abi::RustCall => Abi::RustCall,
             abi::Abi::PlatformIntrinsic => Abi::PlatformIntrinsic,
-            abi::Abi::Unadjusted        => Abi::Unadjusted
+            abi::Abi::Unadjusted => Abi::Unadjusted,
         }
     }
 }
@@ -148,7 +151,7 @@ impl Convert<Vec<Documentation>> for document::Module {
 
         let name = match self.ident {
             Some(id) => id.convert(context),
-            None     => context.crate_info.name.clone(),
+            None => context.crate_info.name.clone(),
         };
 
         let mod_doc = Documentation {
@@ -157,9 +160,7 @@ impl Convert<Vec<Documentation>> for document::Module {
             mod_path: self.path.clone(),
             crate_info: context.crate_info.clone(),
             visibility: Some(self.vis.convert(context)),
-            inner_data: ModuleDoc(Module {
-                is_crate: self.is_crate,
-            }),
+            inner_data: ModuleDoc(Module { is_crate: self.is_crate }),
             links: HashMap::new(),
         };
 
@@ -196,7 +197,7 @@ impl Convert<Documentation> for document::Function {
             visibility: Some(self.vis.convert(context)),
             inner_data: FnDoc(Function {
                 header: self.decl.convert(context),
-                generics: Generics { } ,
+                generics: Generics {},
                 unsafety: self.unsafety.convert(context),
                 constness: self.constness.convert(context),
                 abi: self.abi.convert(context),
@@ -226,9 +227,7 @@ impl Convert<Documentation> for document::Trait {
             mod_path: self.path.clone(),
             crate_info: context.crate_info.clone(),
             visibility: Some(self.vis.convert(context)),
-            inner_data: TraitDoc(Trait {
-                unsafety: self.unsafety.convert(context),
-            }),
+            inner_data: TraitDoc(Trait { unsafety: self.unsafety.convert(context) }),
             links: self.items.convert(context),
         }
     }
@@ -242,9 +241,7 @@ impl Convert<Documentation> for document::TraitItem {
             mod_path: self.path.clone(),
             crate_info: context.crate_info.clone(),
             visibility: Some(Visibility::Inherited),
-            inner_data: TraitItemDoc(TraitItem {
-                node: self.node.convert(context),
-            }),
+            inner_data: TraitItemDoc(TraitItem { node: self.node.convert(context) }),
             links: HashMap::new(),
         }
     }
@@ -266,20 +263,30 @@ impl Convert<DocRelatedItems> for [document::TraitItem] {
             }
         }
 
-        let conv = |items: Vec<document::TraitItem>| {
-            items.iter().cloned().map(|item|
-                                      DocLink {
-                                          name: item.ident.convert(context),
-                                          path: item.path.clone(),
-                                      }
-            ).collect()
-        };
-
         let mut links = HashMap::new();
-        links.insert(DocType::AssocConst, conv(consts));
-        links.insert(DocType::TraitItemMethod, conv(methods));
-        links.insert(DocType::AssocType, conv(types));
-        links.insert(DocType::Macro, conv(macros));
+
+        {
+            let mut conv = |type_: DocType, items: Vec<document::TraitItem>| {
+                let items = items
+                    .iter()
+                    .cloned()
+                    .map(|item| {
+                        StoreLocation {
+                            name: item.ident.convert(context),
+                            crate_info: context.crate_info.clone(),
+                            mod_path: item.path.clone(),
+                            doc_type: type_,
+                        }
+                    })
+                    .collect();
+                links.insert(type_, items);
+            };
+
+            conv(DocType::AssocConst, consts);
+            conv(DocType::TraitItemMethod, methods);
+            conv(DocType::AssocType, types);
+            conv(DocType::Macro, macros);
+        }
         links
     }
 }
@@ -289,16 +296,14 @@ impl Convert<TraitItemKind> for ast::TraitItemKind {
         match *self {
             ast::TraitItemKind::Const(ref ty, ref expr) => {
                 TraitItemKind::Const(ty.convert(context), expr.convert(context))
-            },
+            }
             ast::TraitItemKind::Method(ref sig, ref _block) => {
                 TraitItemKind::Method(sig.convert(context))
-            },
+            }
             ast::TraitItemKind::Type(ref _bounds, ref ty) => {
                 TraitItemKind::Type(ty.convert(context))
-            },
-            ast::TraitItemKind::Macro(ref mac) => {
-                TraitItemKind::Macro(mac.convert(context))
-            },
+            }
+            ast::TraitItemKind::Macro(ref mac) => TraitItemKind::Macro(mac.convert(context)),
         }
     }
 }
@@ -320,9 +325,7 @@ impl Convert<Documentation> for document::Struct {
             mod_path: self.path.clone(),
             crate_info: context.crate_info.clone(),
             visibility: Some(self.vis.convert(context)),
-            inner_data: StructDoc(Struct {
-                fields: self.fields.convert(context),
-            }),
+            inner_data: StructDoc(Struct { fields: self.fields.convert(context) }),
             links: links,
         }
     }
@@ -336,30 +339,42 @@ impl Convert<DocRelatedItems> for document::Impl {
         let mut macros = Vec::new();
         for item in &self.items {
             match item.node {
-                ast::ImplItemKind::Const(..)  => consts.push(item.clone()),
+                ast::ImplItemKind::Const(..) => consts.push(item.clone()),
                 ast::ImplItemKind::Method(..) => methods.push(item.clone()),
-                ast::ImplItemKind::Type(..)   => types.push(item.clone()),
-                ast::ImplItemKind::Macro(..)  => macros.push(item.clone()),
+                ast::ImplItemKind::Type(..) => types.push(item.clone()),
+                ast::ImplItemKind::Macro(..) => macros.push(item.clone()),
             }
         }
 
-        let conv = |items: Vec<ast::ImplItem>| {
-            items.iter().cloned().map(|item| {
-                let name = item.ident.convert(context);
-                DocLink {
-                    name: name.clone(),
-                    path: ModPath::join(&self.path.clone(),
-                                        &ModPath::from(name))
-                }
-            }
-            ).collect()
-        };
-
         let mut links = HashMap::new();
-        links.insert(DocType::AssocConst, conv(consts));
-        links.insert(DocType::Function, conv(methods));
-        links.insert(DocType::AssocType, conv(types));
-        links.insert(DocType::Macro, conv(macros));
+
+        {
+            let mut conv = |type_: DocType, items: Vec<ast::ImplItem>| {
+                let items = items
+                    .iter()
+                    .cloned()
+                    .map(|item| {
+                        let name = item.ident.convert(context);
+                        let ty = pprust::ty_to_string(&self.for_);
+                        println!("ty: {:?}", self.for_);
+                        let path = ModPath::join(&self.path.clone(), &ModPath::from(ty));
+                        println!("name: {} {}", name.clone(), path);
+                        StoreLocation {
+                            name: name.clone(),
+                            crate_info: context.crate_info.clone(),
+                            mod_path: ModPath::join(&path, &ModPath::from(name)),
+                            doc_type: type_.clone(),
+                        }
+                    })
+                    .collect();
+                links.insert(type_, items);
+            };
+            conv(DocType::AssocConst, consts);
+            conv(DocType::Function, methods);
+            conv(DocType::AssocType, types);
+            conv(DocType::Macro, macros);
+        }
+
         links
     }
 }
@@ -373,10 +388,12 @@ impl Convert<DocRelatedItems> for [ast::StructField] {
                 continue;
             }
             let field = item.convert(context);
-            let field_link = DocLink {
+            let field_link = StoreLocation {
                 // TODO: Display nicely, with signature
                 name: field.ident.unwrap(),
-                path: field.path.clone(),
+                crate_info: context.crate_info.clone(),
+                mod_path: field.path.clone(),
+                doc_type: DocType::StructField,
             };
             fields.push(field_link);
         }
@@ -406,9 +423,7 @@ impl Convert<Documentation> for document::Enum {
             mod_path: self.path.clone(),
             crate_info: context.crate_info.clone(),
             visibility: Some(Visibility::Inherited),
-            inner_data: EnumDoc(Enum {
-                variants: self.variants.convert(context),
-            }),
+            inner_data: EnumDoc(Enum { variants: self.variants.convert(context) }),
             links: self.variants.convert(context),
         }
     }
@@ -421,14 +436,16 @@ impl Convert<Ty> for ast::Ty {
 }
 
 impl Convert<DocRelatedItems> for [ast::Variant] {
-    fn convert(&self, _context: &Context) -> DocRelatedItems {
+    fn convert(&self, context: &Context) -> DocRelatedItems {
         let mut variants = Vec::new();
 
         for item in self {
             // TODO: These are just strings for now, instead of separate docs.
-            let variant_link = DocLink {
+            let variant_link = StoreLocation {
                 name: pprust::to_string(|s| s.print_variant(item)),
-                path: ModPath::new(),
+                crate_info: context.crate_info.clone(),
+                mod_path: ModPath::new(),
+                doc_type: DocType::Variant,
             };
             variants.push(variant_link);
         }
