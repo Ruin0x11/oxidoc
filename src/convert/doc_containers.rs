@@ -3,7 +3,8 @@ use std::collections::HashMap;
 use std::fs;
 use std::fmt::{self, Display};
 
-use document::{Attributes, CrateInfo, ModPath};
+use document::{CrateInfo, ModPath};
+use ast_ty_wrappers::Attributes;
 use store;
 
 use convert::wrappers::*;

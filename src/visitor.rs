@@ -6,6 +6,7 @@ use syntax::print::pprust;
 use syntax::symbol::keywords;
 
 use document::*;
+use ast_ty_wrappers::*;
 
 /// Visits the AST starting at a crate and creates a tree of documentation
 /// items. These will later be flattened into a single Store so that no

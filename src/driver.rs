@@ -1,4 +1,3 @@
-use document::{ModPath};
 use convert::Documentation;
 use store::{self, StoreLocation};
 use errors::*;

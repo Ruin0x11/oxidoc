@@ -49,7 +49,7 @@ pub fn generate_crate_registry_docs() -> Result<()> {
     if let Some(x) = env::home_dir() {
         home_dir = x
     } else {
-        bail!("Could not locate home directory");
+        bail!(ErrorKind::NoHomeDirectory);
     }
 
     let path = home_dir.as_path().join(".cargo/registry/doc");
@@ -68,8 +68,8 @@ pub fn generate_stdlib_docs() -> Result<()> {
     let rust_src_dir = env::var("RUST_SRC_PATH")
         .chain_err(|| format!("RUST_SRC_PATH was not set when trying to generate stdlib docs."))?;
 
-    let stdlib_paths = read_dir(rust_src_dir)
-        .chain_err(|| "Couldn't read rust source path")?;
+    let stdlib_paths = read_dir(&rust_src_dir)
+        .chain_err(|| ErrorKind::NoSuchDirectory(rust_src_dir))?;
     let mut paths = Vec::new();
 
     for src in stdlib_paths {
@@ -151,13 +151,13 @@ fn parse_crate(crate_path: &PathBuf, crate_info: &CrateInfo) -> Result<ast::Crat
         main_path = crate_path.join("src/main.rs");
         if !main_path.exists() {
             // TODO: Look for [[bin]] targets here
-            bail!("No crate entry found");
+            bail!(ErrorKind::NoCrateEntryPoint);
         }
     }
 
     let krate = match parse(main_path.as_path(), &parse_session) {
         Ok(k) => k,
-        Err(e) => bail!("Failed to parse crate {}: {:?}", crate_info.name, e),
+        Err(e) => bail!(ErrorKind::CrateParseError(crate_info.name.clone(), format!("{:?}", e))),
     };
 
     Ok(krate)

@@ -22,7 +22,7 @@ pub fn get_doc_registry_path() -> Result<PathBuf> {
     let home_dir = if let Some(dir) = env::home_dir() {
         dir
     } else {
-        bail!("Could not locate home directory");
+        bail!(ErrorKind::NoHomeDirectory);
     };
 
     Ok(home_dir.as_path().join(".cargo/registry/doc"))

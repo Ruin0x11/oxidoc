@@ -1,5 +1,6 @@
 use convert::doc_containers::*;
-use document::{self, ModPath};
+use document::ModPath;
+use ast_ty_wrappers;
 
 #[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub struct Generics {
@@ -80,8 +81,8 @@ pub struct Struct {
 pub struct StructField {
     pub ident: Option<String>,
     pub vis: Visibility,
-    pub ty: document::Ty,
-    pub attrs: document::Attributes,
+    pub ty: ast_ty_wrappers::Ty,
+    pub attrs: ast_ty_wrappers::Attributes,
     pub path: ModPath,
 }
 
@@ -92,7 +93,7 @@ pub struct Module {
 
 #[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub struct Constant {
-    pub ty: document::Ty,
+    pub ty: ast_ty_wrappers::Ty,
     pub expr: String,
 }
 
@@ -103,7 +104,7 @@ pub struct Function {
     pub unsafety: Unsafety,
     pub constness: Constness,
     pub abi: Abi,
-    pub kind: document::FnKind,
+    pub kind: ast_ty_wrappers::FnKind,
 }
 
 #[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
@@ -120,9 +121,9 @@ pub struct TraitItem {
 
 #[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub enum TraitItemKind {
-    Const(document::Ty, Option<String>),
+    Const(ast_ty_wrappers::Ty, Option<String>),
     Method(MethodSig),
-    Type(Option<document::Ty>),
+    Type(Option<ast_ty_wrappers::Ty>),
     Macro(String),
 }
 

@@ -89,7 +89,7 @@ fn run() -> Result<()> {
             Some("crates") => return generator::generate_crate_registry_docs(),
             Some("std") => return generator::generate_stdlib_docs(),
             Some(x) => return generator::generate_docs_for_path(PathBuf::from(x)),
-            None => bail!("No crate source directory supplied"),
+            None => bail!(ErrorKind::NoCrateDirectoryProvided),
         }
     }
 
@@ -98,7 +98,7 @@ fn run() -> Result<()> {
     } else {
         let query = match matches.value_of("query") {
             Some(x) => x,
-            None => bail!("No search query was provided."),
+            None => bail!(ErrorKind::NoSearchQuery),
         };
 
         page_search_query(query)

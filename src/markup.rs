@@ -3,7 +3,8 @@ use std::fmt;
 use ansi_term::Style;
 use catmark::{self, OutputKind};
 use convert::*;
-use document::{Attributes, FnKind, ModPath};
+use document::ModPath;
+use ast_ty_wrappers::{FnKind, Attributes};
 use term_size;
 
 pub enum Markup {
@@ -159,17 +160,15 @@ fn doc_signature(data: &Documentation) -> MarkupDoc {
             if module.is_crate {
                 return MarkupDoc::new(vec![Rule(10), LineBreak]);
             } else {
-                format!("mod {}", data.mod_path)
+                doc_module(data, module)
             }
         }
-        DocInnerData::FnDoc(ref func) => format!("fn {} {}", data.name, func.header),
-        DocInnerData::EnumDoc(..) => format!("enum {}", data.name),
-        DocInnerData::StructDoc(..) => format!("struct {} {{ /* fields omitted */ }}", data.name),
-        DocInnerData::ConstDoc(ref const_) => {
-            format!("const {}: {} = {}", data.name, const_.ty.name, const_.expr)
-        }
-        DocInnerData::TraitDoc(..) => format!("trait {} {{ /* fields omitted */ }}", data.name),
-        DocInnerData::TraitItemDoc(ref item) => format!("{}", trait_item(data, item)),
+        DocInnerData::FnDoc(ref func) => doc_fn(data, func),
+        DocInnerData::EnumDoc(..) => doc_enum(data),
+        DocInnerData::StructDoc(..) => doc_struct(data),
+        DocInnerData::ConstDoc(ref konst) => doc_const(data, konst),
+        DocInnerData::TraitDoc(..) => doc_trait(data),
+        DocInnerData::TraitItemDoc(ref item) => doc_trait_item(data, item),
     };
 
     MarkupDoc::new(vec![
@@ -182,7 +181,31 @@ fn doc_signature(data: &Documentation) -> MarkupDoc {
     ])
 }
 
-fn trait_item(data: &Documentation, item: &TraitItem) -> String {
+fn doc_module(data: &Documentation, module: &Module) -> String {
+    format!("mod {}", data.mod_path)
+}
+
+fn doc_fn(data: &Documentation, func: &Function) -> String {
+    format!("fn {} {}", data.name, func.header)
+}
+
+fn doc_enum(data: &Documentation) -> String {
+    format!("enum {}", data.name)
+}
+
+fn doc_struct(data: &Documentation) -> String {
+    format!("struct {} {{ /* fields omitted */ }}", data.name)
+}
+
+fn doc_const(data: &Documentation, konst: &Constant) -> String {
+    format!("const {}: {} = {}", data.name, konst.ty.name, konst.expr)
+}
+
+fn doc_trait(data: &Documentation) -> String {
+    format!("trait {} {{ /* fields omitted */ }}", data.name)
+}
+
+fn doc_trait_item(data: &Documentation, item: &TraitItem) -> String {
     let item_string = match item.node {
         TraitItemKind::Const(ref ty, ref expr) => {
             let expr_string = match *expr {

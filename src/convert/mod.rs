@@ -14,7 +14,8 @@ use syntax::ast;
 use syntax::print::pprust;
 use syntax::ptr::P;
 
-use document::{self, Impl, Ty, Attributes, CrateInfo, ModPath};
+use ast_ty_wrappers::{self, Impl, Ty, Attributes};
+use document::{self, CrateInfo, ModPath};
 use visitor::OxidocVisitor;
 
 pub use convert::wrappers::*;
@@ -127,7 +128,7 @@ impl Convert<Vec<Documentation>> for OxidocVisitor {
     }
 }
 
-impl Convert<Vec<Documentation>> for document::Module {
+impl Convert<Vec<Documentation>> for ast_ty_wrappers::Module {
     fn convert(&self, context: &Context) -> Vec<Documentation> {
         for (ident, path) in self.namespaces_to_paths.iter() {
             debug!("in {:?}, {} => {}", self.ident, ident, path);
@@ -171,7 +172,7 @@ impl Convert<Vec<Documentation>> for document::Module {
     }
 }
 
-impl Convert<Documentation> for document::Constant {
+impl Convert<Documentation> for ast_ty_wrappers::Constant {
     fn convert(&self, context: &Context) -> Documentation {
         Documentation {
             name: self.ident.convert(context),
@@ -188,7 +189,7 @@ impl Convert<Documentation> for document::Constant {
     }
 }
 
-impl Convert<Documentation> for document::Function {
+impl Convert<Documentation> for ast_ty_wrappers::Function {
     fn convert(&self, context: &Context) -> Documentation {
         Documentation {
             name: self.ident.convert(context),
@@ -220,7 +221,7 @@ impl Convert<MethodSig> for ast::MethodSig {
     }
 }
 
-impl Convert<Documentation> for document::Trait {
+impl Convert<Documentation> for ast_ty_wrappers::Trait {
     fn convert(&self, context: &Context) -> Documentation {
         Documentation {
             name: self.ident.convert(context),
@@ -236,7 +237,7 @@ impl Convert<Documentation> for document::Trait {
     }
 }
 
-impl Convert<Documentation> for document::TraitItem {
+impl Convert<Documentation> for ast_ty_wrappers::TraitItem {
     fn convert(&self, context: &Context) -> Documentation {
         Documentation {
             name: self.ident.convert(context),
@@ -252,7 +253,7 @@ impl Convert<Documentation> for document::TraitItem {
     }
 }
 
-impl Convert<DocRelatedItems> for [document::TraitItem] {
+impl Convert<DocRelatedItems> for [ast_ty_wrappers::TraitItem] {
     fn convert(&self, context: &Context) -> DocRelatedItems {
         let mut consts = Vec::new();
         let mut methods = Vec::new();
@@ -268,7 +269,7 @@ impl Convert<DocRelatedItems> for [document::TraitItem] {
             }
         }
 
-        let conv = |items: Vec<document::TraitItem>| {
+        let conv = |items: Vec<ast_ty_wrappers::TraitItem>| {
             items.iter().cloned().map(|item|
                                       DocLink {
                                           name: item.ident.convert(context),
@@ -305,7 +306,7 @@ impl Convert<TraitItemKind> for ast::TraitItemKind {
     }
 }
 
-impl Convert<Documentation> for document::Struct {
+impl Convert<Documentation> for ast_ty_wrappers::Struct {
     fn convert(&self, context: &Context) -> Documentation {
         let mut links: DocRelatedItems = self.fields.convert(context);
         if let Some(impls) = context.impls_for_ty.get(&self.path) {
@@ -330,7 +331,7 @@ impl Convert<Documentation> for document::Struct {
     }
 }
 
-impl Convert<DocRelatedItems> for document::Impl {
+impl Convert<DocRelatedItems> for ast_ty_wrappers::Impl {
     fn convert(&self, context: &Context) -> DocRelatedItems {
         let mut consts = Vec::new();
         let mut methods = Vec::new();
@@ -400,7 +401,7 @@ impl Convert<StructField> for ast::StructField {
     }
 }
 
-impl Convert<Documentation> for document::Enum {
+impl Convert<Documentation> for ast_ty_wrappers::Enum {
     fn convert(&self, context: &Context) -> Documentation {
         Documentation {
             name: self.ident.convert(context),
