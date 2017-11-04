@@ -24,7 +24,8 @@ impl Display for PathSegment {
 }
 
 /// Represents a module path, like `std::fmt`. Used for easily resolving crate modules to their
-/// on-disk documentation locations.
+/// on-disk documentation locations. It should be possible to locate a piece of corresponding
+/// documentation with a complete ModPath.
 #[derive(PartialEq, Eq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct ModPath(pub Vec<PathSegment>);
 
@@ -99,7 +100,7 @@ impl ModPath {
     }
 
     pub fn to_filepath(&self) -> PathBuf {
-        PathBuf::from(self.0.iter().fold(String::new(), |res, s| res + &s.identifier.clone() + "/"))
+        self.0.iter().fold(PathBuf::new(), |res, s| res.join(s.identifier.clone()))
     }
 
     pub fn segments(&self) -> slice::Iter<PathSegment> {

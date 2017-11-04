@@ -1,4 +1,4 @@
-use convert::Documentation;
+use conversion::Documentation;
 use store::{self, StoreLocation};
 use errors::*;
 
@@ -23,9 +23,4 @@ impl Driver {
         let path = location.to_filepath();
         store::deserialize_object(path)
     }
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
 }

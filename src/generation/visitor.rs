@@ -6,7 +6,7 @@ use syntax::print::pprust;
 use syntax::symbol::keywords;
 
 use document::*;
-use ast_ty_wrappers::*;
+use generation::ast_ty_wrappers::*;
 
 /// Visits the AST starting at a crate and creates a tree of documentation
 /// items. These will later be flattened into a single Store so that no
@@ -72,8 +72,8 @@ impl OxidocVisitor {
                 module.fns.push(f);
             },
             // TODO: Handle types and macros
-            ast::ImplItemKind::Type(ref ty) => (),
-            ast::ImplItemKind::Macro(ref mac) => (),
+            ast::ImplItemKind::Type(ref _ty) => (),
+            ast::ImplItemKind::Macro(ref _mac) => (),
         }
     }
 

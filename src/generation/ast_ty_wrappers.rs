@@ -1,11 +1,8 @@
 use std::collections::HashMap;
-use std::fmt::{self, Display};
-use std::path::PathBuf;
 use std::{slice, vec};
 
 use syntax::ast;
 use syntax::abi;
-use syntax::codemap::{Span};
 use syntax::print::pprust;
 
 use document::ModPath;

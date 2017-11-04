@@ -2,9 +2,9 @@ use std::fmt;
 
 use ansi_term::Style;
 use catmark::{self, OutputKind};
-use convert::*;
+use conversion::*;
 use document::ModPath;
-use ast_ty_wrappers::{FnKind, Attributes};
+use generation::ast_ty_wrappers::{FnKind, Attributes};
 use term_size;
 
 pub enum Markup {
@@ -52,6 +52,7 @@ impl fmt::Display for Markup {
     }
 }
 
+/// A formatted piece of documentation made up of individual markup pieces.
 pub struct MarkupDoc {
     pub parts: Vec<Markup>,
 }
@@ -72,6 +73,7 @@ impl fmt::Display for MarkupDoc {
     }
 }
 
+/// Describes an item that can be inserted into documentation markup.
 pub trait Format {
     fn format(&self) -> MarkupDoc;
 }
@@ -126,6 +128,14 @@ fn doc_header(data: &Documentation) -> MarkupDoc {
     ])
 }
 
+fn doc_body(data: &Documentation) -> MarkupDoc {
+    data.attrs.format()
+}
+
+fn doc_related_items(data: &Documentation) -> MarkupDoc {
+    MarkupDoc::new(vec![])
+}
+
 fn doc_inner_info(data: &Documentation) -> MarkupDoc {
     let markup = match data.inner_data {
         DocInnerData::FnDoc(ref func) => {
@@ -160,7 +170,7 @@ fn doc_signature(data: &Documentation) -> MarkupDoc {
             if module.is_crate {
                 return MarkupDoc::new(vec![Rule(10), LineBreak]);
             } else {
-                doc_module(data, module)
+                doc_module(data)
             }
         }
         DocInnerData::FnDoc(ref func) => doc_fn(data, func),
@@ -181,7 +191,7 @@ fn doc_signature(data: &Documentation) -> MarkupDoc {
     ])
 }
 
-fn doc_module(data: &Documentation, module: &Module) -> String {
+fn doc_module(data: &Documentation) -> String {
     format!("mod {}", data.mod_path)
 }
 
@@ -225,12 +235,4 @@ fn doc_trait_item(data: &Documentation, item: &TraitItem) -> String {
         TraitItemKind::Macro(ref mac) => format!("macro {} {}", data.name, mac),
     };
     item_string
-}
-
-fn doc_body(data: &Documentation) -> MarkupDoc {
-    data.attrs.format()
-}
-
-fn doc_related_items(data: &Documentation) -> MarkupDoc {
-    MarkupDoc::new(vec![])
 }

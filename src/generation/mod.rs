@@ -1,3 +1,7 @@
+pub mod ast_ty_wrappers;
+mod io_support;
+pub mod visitor;
+
 use std;
 use std::env;
 use std::path::{Path, PathBuf};
@@ -9,18 +13,18 @@ use syntax::diagnostics::plugin::DiagnosticBuilder;
 use syntax::parse::{self, ParseSess};
 use syntax::codemap::FilePathMapping;
 
-use paths;
 use document::*;
-use convert::{Convert, Context, Documentation};
-use store::{self, Docset};
+use conversion::{Convert, Context, Documentation};
+use paths;
+use store::Docset;
 use toml_util;
-use visitor::OxidocVisitor;
+use self::visitor::OxidocVisitor;
 
 use ::errors::*;
 
-fn parse<'a, T: ?Sized + AsRef<Path>>(path: &T,
-                                      parse_session: &'a ParseSess)
-                                      -> std::result::Result<ast::Crate, Option<DiagnosticBuilder<'a>>> {
+fn parse_crate_from_path<'a, T: ?Sized + AsRef<Path>>(path: &T,
+                                                      parse_session: &'a ParseSess)
+                                                      -> std::result::Result<ast::Crate, Option<DiagnosticBuilder<'a>>> {
     let path = path.as_ref();
 
     match parse::parse_crate_from_file(path, parse_session) {
@@ -45,18 +49,11 @@ pub fn generate_all_docs() -> Result<()> {
 }
 
 pub fn generate_crate_registry_docs() -> Result<()> {
-    let home_dir: PathBuf;
-    if let Some(x) = env::home_dir() {
-        home_dir = x
-    } else {
-        bail!(ErrorKind::NoHomeDirectory);
-    }
-
-    let path = home_dir.as_path().join(".cargo/registry/doc");
+    let path = paths::doc_registry_path()?;
 
     remove_dir_all(path);
 
-    for src_dir in paths::src_iter(true, true)
+    for src_dir in paths::iter_crate_source_paths()
         .chain_err(|| "Could not iterate cargo registry src directories")?
     {
         generate_docs_for_path(src_dir)?;
@@ -155,7 +152,7 @@ fn parse_crate(crate_path: &PathBuf, crate_info: &CrateInfo) -> Result<ast::Crat
         }
     }
 
-    let krate = match parse(main_path.as_path(), &parse_session) {
+    let krate = match parse_crate_from_path(main_path.as_path(), &parse_session) {
         Ok(k) => k,
         Err(e) => bail!(ErrorKind::CrateParseError(crate_info.name.clone(), format!("{:?}", e))),
     };
@@ -164,7 +161,7 @@ fn parse_crate(crate_path: &PathBuf, crate_info: &CrateInfo) -> Result<ast::Crat
 }
 
 pub fn generate_crate_docs(krate: ast::Crate, crate_info: CrateInfo) -> Result<Vec<Documentation>> {
-    let crate_doc_path = store::get_crate_doc_path(&crate_info)
+    let crate_doc_path = paths::crate_doc_path(&crate_info)
         .chain_err(|| format!("Unable to get crate doc path for crate: {}",
                               &crate_info.name))?;
 

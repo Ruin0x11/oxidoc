@@ -1,6 +1,6 @@
 use std::sync::Mutex;
 
-use convert::Documentation;
+use conversion::Documentation;
 use cursive::{self, Cursive};
 use cursive::align::HAlign;
 use cursive::traits::*;

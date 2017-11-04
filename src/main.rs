@@ -17,12 +17,11 @@ extern crate catmark;
 
 extern crate oxidoc;
 
-use std::env;
 use std::path::PathBuf;
 
 use clap::{App, Arg};
 use oxidoc::driver::Driver;
-use oxidoc::generator;
+use oxidoc::generation;
 use oxidoc::errors::*;
 use oxidoc::store::StoreLocation;
 use oxidoc::markup::Format;
@@ -76,6 +75,16 @@ fn main() {
     }
 }
 
+fn generate(arg: Option<&str>) -> Result<()> {
+    match arg {
+        Some("all") => generation::generate_all_docs(),
+        Some("crates") => generation::generate_crate_registry_docs(),
+        Some("std") => generation::generate_stdlib_docs(),
+        Some(x) => generation::generate_docs_for_path(PathBuf::from(x)),
+        None => bail!(ErrorKind::NoCrateDirectoryProvided),
+    }
+}
+
 fn run() -> Result<()> {
     let matches = app().get_matches();
     if matches.is_present("version") {
@@ -84,13 +93,7 @@ fn run() -> Result<()> {
     }
 
     if matches.is_present("generate") {
-        match matches.value_of("generate") {
-            Some("all") => return generator::generate_all_docs(),
-            Some("crates") => return generator::generate_crate_registry_docs(),
-            Some("std") => return generator::generate_stdlib_docs(),
-            Some(x) => return generator::generate_docs_for_path(PathBuf::from(x)),
-            None => bail!(ErrorKind::NoCrateDirectoryProvided),
-        }
+        return generate(matches.value_of("generate"));
     }
 
     if matches.is_present("tui") {

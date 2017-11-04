@@ -4,7 +4,7 @@
 mod wrappers;
 mod doc_containers;
 
-pub use convert::doc_containers::*;
+pub use conversion::doc_containers::*;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -14,11 +14,11 @@ use syntax::ast;
 use syntax::print::pprust;
 use syntax::ptr::P;
 
-use ast_ty_wrappers::{self, Impl, Ty, Attributes};
-use document::{self, CrateInfo, ModPath};
-use visitor::OxidocVisitor;
+use generation::ast_ty_wrappers::{self, Impl, Ty, Attributes};
+use generation::visitor::OxidocVisitor;
+use document::{CrateInfo, ModPath};
 
-pub use convert::wrappers::*;
+pub use conversion::wrappers::*;
 
 #[derive(Clone)]
 pub struct Context {

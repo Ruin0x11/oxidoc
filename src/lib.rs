@@ -23,16 +23,13 @@ extern crate catmark;
 #[cfg(unix)]
 extern crate pager;
 
-pub mod convert;
+pub mod conversion;
+pub mod generation;
 pub mod document;
 pub mod driver;
-pub mod generator;
-mod io_support;
 pub mod markup;
-pub mod paths;
 pub mod store;
 mod toml_util;
 pub mod tui;
-pub mod visitor;
-pub mod ast_ty_wrappers;
 pub mod errors;
+mod paths;

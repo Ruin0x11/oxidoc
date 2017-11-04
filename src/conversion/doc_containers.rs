@@ -4,17 +4,17 @@ use std::fs;
 use std::fmt::{self, Display};
 
 use document::{CrateInfo, ModPath};
-use ast_ty_wrappers::Attributes;
+use generation::ast_ty_wrappers::Attributes;
 use store;
 
-use convert::wrappers::*;
-use convert::wrappers::TraitItemKind;
+use conversion::wrappers::*;
+use conversion::wrappers::TraitItemKind;
 use ::errors::*;
 
 pub use self::DocInnerData::*;
 
-pub type DocRelatedItems = HashMap<DocType, Vec<DocLink>>;
-
+/// A piece of displayable documentation, containing relevant information based on the thing being
+/// documented.
 #[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub struct Documentation {
     pub name: String,
@@ -35,9 +35,6 @@ impl Display for Visibility {
         };
         write!(f, "{}", vis)
     }
-}
-
-impl DocInnerData {
 }
 
 impl Documentation {
@@ -149,6 +146,10 @@ impl Documentation {
         store::serialize_object(self, path)
     }
 }
+
+/// A list of documentation locations related to the current item, like methods implemented on
+/// structs.
+pub type DocRelatedItems = HashMap<DocType, Vec<DocLink>>;
 
 #[derive(Clone, Hash, Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub struct DocLink

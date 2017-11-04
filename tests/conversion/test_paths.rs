@@ -1,4 +1,4 @@
-use oxidoc::convert::Documentation;
+use oxidoc::conversion::Documentation;
 use oxidoc::document::ModPath;
 
 use util::{source_to_docs, print_paths};
@@ -23,7 +23,7 @@ fn assert_paths_found(converted: &Vec<Documentation>, mut paths: Vec<&str>) {
 
     assert!(
         found_paths == expected_paths,
-        "\nFound\n====\n{}\n\nExpected\n====\n{}\n",
+        "\nExpected\n====\n{}\n\nFound\n====\n{}\n",
         print_paths(&found_paths),
         print_paths(&expected_paths)
     );
@@ -192,4 +192,56 @@ pub mod b {
             "crate::b",
         ],
     )
+}
+
+#[test]
+fn test_separate_impl() {
+    let docs = source_to_docs(r#"
+pub struct Test;
+
+impl Test {
+    pub fn foo() {}
+}
+
+impl Test {
+    pub fn bar() {}
+}
+"#);
+    assert_paths_found(
+        &docs,
+        vec![
+            "crate",
+            "crate::Test",
+            "crate::Test::foo",
+            "crate::Test::bar"
+        ]
+    );
+}
+
+#[test]
+fn test_separate_nested_impl() {
+    let docs = source_to_docs(r#"
+pub struct Test;
+
+impl Test {
+    pub fn foo() {}
+}
+
+pub mod a {
+    use ::Test;
+    impl Test {
+        pub fn bar() {}
+    }
+}
+"#);
+    assert_paths_found(
+        &docs,
+        vec![
+            "crate",
+            "crate::Test",
+            "crate::Test::foo",
+            "crate::Test::bar",
+            "crate::Test::a"
+        ]
+    );
 }

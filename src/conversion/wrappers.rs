@@ -1,6 +1,6 @@
-use convert::doc_containers::*;
+use conversion::doc_containers::*;
 use document::ModPath;
-use ast_ty_wrappers;
+use generation::ast_ty_wrappers;
 
 #[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub struct Generics {

@@ -1,6 +1,5 @@
-use convert::Documentation;
+use conversion::Documentation;
 use std::collections::{HashMap, HashSet};
-use std::env;
 use std::fmt;
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
@@ -11,39 +10,11 @@ use serde::de::DeserializeOwned;
 use serde::ser::Serialize;
 use strsim::levenshtein;
 
-use convert::DocType;
+use conversion::DocType;
 use document::CrateInfo;
 use document::ModPath;
+use paths;
 use ::errors::*;
-
-const STORE_FILENAME: &str = "store";
-
-pub fn get_doc_registry_path() -> Result<PathBuf> {
-    let home_dir = if let Some(dir) = env::home_dir() {
-        dir
-    } else {
-        bail!(ErrorKind::NoHomeDirectory);
-    };
-
-    Ok(home_dir.as_path().join(".cargo/registry/doc"))
-}
-
-/// Obtains the base output path for a crate's documentation.
-pub fn get_crate_doc_path(crate_info: &CrateInfo) -> Result<PathBuf> {
-    let registry_path = get_doc_registry_path()?;
-
-    let path = registry_path.join(format!("{}-{}",
-                                          crate_info.name,
-                                          crate_info.version));
-    Ok(path)
-}
-
-
-fn get_store_file() -> Result<PathBuf> {
-    let mut registry_path = get_doc_registry_path()?;
-    registry_path.push(STORE_FILENAME);
-    Ok(registry_path)
-}
 
 fn create_or_open_file<T: AsRef<Path>>(path: T) -> Result<File> {
     let path_as = path.as_ref();
@@ -98,10 +69,20 @@ pub fn serialize_object<S, T>(data: &S, path: T) -> Result<()>
 
 type CrateVersion = String;
 type CrateName = String;
+
+/// Mapping of version strings for a crate to the documentation for that crate version.
 type CrateVersions = HashMap<CrateVersion, Docset>;
+
+/// Top-level storage of all crates and their documents, organized by version.
 type DocumentCorpus = HashMap<CrateName, CrateVersions>;
+
+/// Mapping from module path keywords to the full module paths that use those keywords. Used for
+/// quick lookup of documentation based on keywords.
 type ModuleExpansions = HashMap<String, HashSet<String>>;
 
+/// The central point for retrieving documentation. Stores a map of crate names to their versions,
+/// which map to their individual documentation stores. Also contains a keyword prefix map for
+/// quick documentation searching.
 #[derive(Serialize, Deserialize)]
 pub struct Store {
     /// "serde" => "1.0.0" => Docset { /* ... */}
@@ -128,31 +109,38 @@ impl Store {
     }
 
     pub fn save(&mut self) -> Result<()> {
-        let store_file = get_store_file()?;
+        let store_file = paths::store_file_path()?;
         serialize_object(self, store_file)
     }
 
     pub fn load_from_disk() -> Result<Self> {
-        let store_file = get_store_file()?;
+        let store_file = paths::store_file_path()?;
         deserialize_object(store_file)
     }
 
+    /// Add documentation for a specific version of a crate.
     pub fn add_docset(&mut self, crate_info: CrateInfo, docset: Docset) {
         // TODO: Any way to remove old module expansions if docset is regenerated?
         for doc in docset.documents.values() {
-            for segment in doc.mod_path.0.iter() {
-                let mod_path = doc.mod_path.to_string().to_lowercase();
-
-                let mut entry = self.module_expansions
-                    .entry(segment.identifier.to_lowercase())
-                    .or_insert(HashSet::new());
-
-                entry.insert(mod_path);
-            }
+            self.add_module_expansions(doc);
         }
 
         let mut entry = self.items.entry(crate_info.name).or_insert(HashMap::new());
         entry.insert(crate_info.version, docset);
+    }
+
+    /// Adds the keywords for module paths in the provided document to the prefix map used for
+    /// document loookup.
+    fn add_module_expansions(&mut self, doc: &StoreLocation) {
+        for segment in doc.mod_path.0.iter() {
+            let mod_path = doc.mod_path.to_string().to_lowercase();
+
+            let entry = self.module_expansions
+                .entry(segment.identifier.to_lowercase())
+                .or_insert(HashSet::new());
+
+            entry.insert(mod_path);
+        }
     }
 
     pub fn all_locations(&self) -> Vec<StoreLocation> {
@@ -165,30 +153,15 @@ impl Store {
         results
     }
 
+    /// Search the documentation store for a keyword and return the documents with a match inside
+    /// their module paths.
     pub fn lookup_name(&self, query: &str) -> Vec<&StoreLocation> {
         let mut results = Vec::new();
 
         let matches = get_all_matching_paths(query.to_string(), &self.module_expansions);
 
         for mat in matches {
-            let krate_name = mat.split("::").next().unwrap().to_string();
-
-            // TODO: select based on latest version
-            let res: Option<&StoreLocation> =
-                if let Some(krate_versions) = self.items.get(&krate_name) {
-                    if let Some(version) = latest_version(krate_versions) {
-                        krate_versions.get(version).and_then(|docset| {
-                            let path = ModPath::from(mat.clone()).tail().to_string();
-                            docset.documents.get(&path)
-                        })
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                };
-
-            if let Some(loc) = res {
+            if let Some(loc) = self.retrieve_match(mat) {
                 results.push(loc);
             }
         }
@@ -196,6 +169,31 @@ impl Store {
         results.sort_by_key(|loc| levenshtein(query, &loc.mod_path.to_string()));
 
         results
+    }
+
+    /// Searches the documentation store for the given fully resolved module path string.
+    fn retrieve_match(&self, mat: String) -> Option<&StoreLocation> {
+        let krate_name = mat.split("::").next().unwrap().to_string();
+
+        let path_in_krate = ModPath::from(mat.clone());
+        self.latest_doc_with_match(&krate_name, path_in_krate)
+    }
+
+    /// Retrieves the latest documentation for a crate matching the given module path
+    fn latest_doc_with_match(&self, krate_name: &str, path_in_krate: ModPath) -> Option<&StoreLocation> {
+        // FIXME: Doesn't handle items that exist in old versions and removed in the latest version
+        if let Some(krate_versions) = self.items.get(krate_name) {
+            if let Some(version) = latest_version(krate_versions) {
+                krate_versions.get(version).and_then(|docset| {
+                    let path = path_in_krate.tail().to_string();
+                    docset.documents.get(&path)
+                })
+            } else {
+                None
+            }
+        } else {
+            None
+        }
     }
 }
 
@@ -212,7 +210,7 @@ fn latest_version(versions: &CrateVersions) -> Option<&CrateVersion> {
     res
 }
 
-/// Returns the module paths which contain all the provided path segments
+/// Returns the module paths which contain all the provided path segments.
 fn get_all_matching_paths(query: String,
                           module_expansions: &ModuleExpansions)
                           -> Vec<String> {
@@ -236,20 +234,22 @@ fn get_all_matching_paths(query: String,
     result
 }
 
+/// Returns the strings that exist in both `target` and `other`.
 fn intersect(target: Vec<String>, other: &HashSet<String>) -> Vec<String> {
-    let mut common = Vec::new();
-    let mut v_other: Vec<_> = other.iter().collect();
+    let mut in_common = Vec::new();
+    let mut other_vec: Vec<_> = other.iter().collect();
 
     for e1 in target.into_iter() {
-        if let Some(pos) = v_other.iter().position(|e2| e1 == **e2) {
-            common.push(e1);
-            v_other.remove(pos);
+        if let Some(pos) = other_vec.iter().position(|e2| e1 == **e2) {
+            in_common.push(e1);
+            other_vec.remove(pos);
         }
     }
 
-    common
+    in_common
 }
 
+/// Returns an integer that can be used to compare Semantic Versioning strings.
 fn version_number_hash(version: &str) -> u64 {
     let slice: Vec<String> = version.split(".").map(|s| s.to_string()).collect();
     if slice.len() != 3 {
@@ -261,9 +261,10 @@ fn version_number_hash(version: &str) -> u64 {
     (a << 16) + (b << 8) + c
 }
 
+/// A set of documentation for a specific crate version.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Docset {
-    /// Map from relative module path to location
+    /// Mapping from a crate-local module path string to the corresponding location
     /// "vec::Vec" => StoreLocation { name: Vec, /* ... */ }
     pub documents: HashMap<String, StoreLocation>,
 }
@@ -275,17 +276,24 @@ impl Docset {
         }
     }
 
+    fn add_doc(&mut self, document: Documentation) -> Result<()> {
+        let relative_path = document.mod_path.tail().to_string();
+        let store_location = document.to_store_location();
+        self.documents.insert(relative_path.to_lowercase(), store_location);
+        document.save()
+            .chain_err(|| format!("Could not add doc {} to docset", document.mod_path))
+    }
+
     pub fn add_docs(&mut self, documents: Vec<Documentation>) -> Result<()> {
         for doc in documents.into_iter() {
-            let relative_path = doc.mod_path.tail().to_string();
-            self.documents.insert(relative_path.to_lowercase(), doc.to_store_location());
-            doc.save()
-                .chain_err(|| format!("Could not add doc {} to docset", doc.mod_path))?;
+            self.add_doc(doc)?;
         }
         Ok(())
     }
 }
 
+/// Represents the on-disk location of a piece of documentation, with additional metadata on the
+/// containing crate and type of object being documented.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct StoreLocation {
     pub name: String,
@@ -309,7 +317,7 @@ impl StoreLocation {
     }
 
     pub fn to_filepath(&self) -> PathBuf {
-        let mut path = get_crate_doc_path(&self.crate_info).unwrap();
+        let mut path = paths::crate_doc_path(&self.crate_info).unwrap();
         let doc_path = self.mod_path.to_filepath();
         path.push(doc_path);
         let filename = format!("{}{}.odoc", self.doc_type.get_file_prefix(), self.name);
@@ -321,48 +329,5 @@ impl StoreLocation {
 impl fmt::Display for StoreLocation {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{} ({} {})", self.mod_path, self.crate_info.name, self.crate_info.version)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_read_write_bincode() {
-        let string = "Test.".to_string();
-        let path = PathBuf::from("/tmp/test.txt");
-
-        serialize_object(&string, &path).expect("Write failed");
-        let result: String = deserialize_object(&path).expect("Read failed");
-
-        assert_eq!(string, result);
-    }
-
-    #[test]
-    fn test_store_loc_to_path() {
-        let loc = StoreLocation {
-            name: "Test".to_string(),
-            crate_info: CrateInfo {
-                name: "test".to_string(),
-                version: "0.1.0".to_string(),
-                lib_path: None,
-            },
-            mod_path: ModPath::from("crate::thing".to_string()),
-            doc_type: DocType::Struct,
-        };
-
-        let path = loc.to_filepath().display().to_string();
-        assert!(path.contains("test-0.1.0/crate/thing/sdesc-Test.odoc"), "{}", path);
-    }
-
-    #[test]
-    fn test_compare_version_numbers() {
-        let assert_second_newer = |a, b| assert!(version_number_hash(a) < version_number_hash(b),
-                                                 "{} {}", a, b);
-        assert_second_newer("0.1.0", "0.2.0");
-        assert_second_newer("0.1.0", "1.0.0");
-        assert_second_newer("0.1.0", "1.0.1");
-        assert_second_newer("0.0.1", "0.1.0");
     }
 }
