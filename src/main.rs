@@ -9,7 +9,6 @@ extern crate ansi_term;
 extern crate bincode;
 extern crate cursive;
 extern crate env_logger;
-extern crate pager;
 extern crate regex;
 extern crate serde;
 extern crate syntex_syntax as syntax;
@@ -28,6 +27,10 @@ use oxidoc::errors::*;
 use oxidoc::store::StoreLocation;
 use oxidoc::markup::Format;
 use oxidoc::store::Store;
+
+#[cfg(unix)]
+extern crate pager;
+#[cfg(unix)]
 use pager::Pager;
 
 fn app<'a, 'b>() -> App<'a, 'b> {
@@ -102,6 +105,17 @@ fn run() -> Result<()> {
     }
 }
 
+#[cfg(windows)]
+fn setup_pager() {}
+
+#[cfg(unix)]
+fn setup_pager() {
+    let executable = get_pager_executable();
+
+    Pager::with_pager(&executable).setup();
+}
+
+#[cfg(unix)]
 fn get_pager_executable() -> String {
     if let Ok(pager) = env::var("PAGER") {
         return pager.to_string();
@@ -138,9 +152,7 @@ fn page_search_query(query: &str) -> Result<()> {
         })
         .collect();
 
-    let executable = get_pager_executable();
-
-    Pager::with_pager(&executable).setup();
+    setup_pager();
 
     for result in formatted {
         println!("{}", result);

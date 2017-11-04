@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::fmt::{self, Display};
 use std::path::PathBuf;
-use std::slice;
+use std::{slice, vec};
 
 use syntax::ast;
 use syntax::abi;
@@ -167,12 +167,12 @@ pub trait Documentable {
 // FIXME: Duplication from librustdoc
 pub struct ListAttributesIter<'a> {
     attrs: slice::Iter<'a, ast::Attribute>,
-    current_list: slice::Iter<'a, ast::NestedMetaItem>,
+    current_list: vec::IntoIter<ast::NestedMetaItem>,
     name: &'a str
 }
 
 impl<'a> Iterator for ListAttributesIter<'a> {
-    type Item = &'a ast::NestedMetaItem;
+    type Item = ast::NestedMetaItem;
 
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(nested) = self.current_list.next() {
@@ -180,9 +180,9 @@ impl<'a> Iterator for ListAttributesIter<'a> {
         }
 
         for attr in &mut self.attrs {
-            if let Some(ref list) = attr.meta_item_list() {
+            if let Some(list) = attr.meta_item_list() {
                 if attr.check_name(self.name) {
-                    self.current_list = list.iter();
+                    self.current_list = list.into_iter();
                     if let Some(nested) = self.current_list.next() {
                         return Some(nested);
                     }
@@ -196,30 +196,29 @@ impl<'a> Iterator for ListAttributesIter<'a> {
 
 pub trait AttributesExt {
     /// Finds an attribute as List and returns the list of attributes nested inside.
-    fn lists<'a>(&'a self, &'a str) -> ListAttributesIter<'a>;
+    fn lists<'a>(&'a self, name: &'a str) -> ListAttributesIter<'a>;
 }
 
 impl AttributesExt for [ast::Attribute] {
     fn lists<'a>(&'a self, name: &'a str) -> ListAttributesIter<'a> {
         ListAttributesIter {
             attrs: self.iter(),
-            current_list: [].iter(),
-            name: name
+            current_list: Vec::new().into_iter(),
+            name,
         }
     }
 }
 
 pub trait NestedAttributesExt {
     /// Returns whether the attribute list contains a specific `Word`
-    fn has_word(self, &str) -> bool;
+    fn has_word(self, word: &str) -> bool;
 }
 
-impl<'a, I: IntoIterator<Item=&'a ast::NestedMetaItem>> NestedAttributesExt for I {
+impl<I: IntoIterator<Item=ast::NestedMetaItem>> NestedAttributesExt for I {
     fn has_word(self, word: &str) -> bool {
         self.into_iter().any(|attr| attr.is_word() && attr.check_name(word))
     }
 }
-
 
 #[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub struct Attributes {

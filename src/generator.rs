@@ -7,6 +7,7 @@ use store::Store;
 use syntax::ast;
 use syntax::diagnostics::plugin::DiagnosticBuilder;
 use syntax::parse::{self, ParseSess};
+use syntax::codemap::FilePathMapping;
 
 use paths;
 use document::*;
@@ -141,7 +142,7 @@ fn cache_doc_for_crate(crate_path: &PathBuf) -> Result<()> {
 }
 
 fn parse_crate(crate_path: &PathBuf, crate_info: &CrateInfo) -> Result<ast::Crate> {
-    let parse_session = ParseSess::new();
+    let parse_session = ParseSess::new(FilePathMapping::empty());
     let lib_path = crate_info.lib_path.clone().unwrap_or("src/lib.rs".to_string());
 
     // TODO: This has to handle multiple [[bin]] targets.

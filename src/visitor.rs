@@ -174,6 +174,7 @@ impl OxidocVisitor {
 
     fn visit_impl(&self, item: &ast::Item,
                   ast_unsafety: ast::Unsafety,
+                  _ast_defaultness: &ast::Defaultness,
                   _ast_generics: &ast::Generics,
                   ast_trait_ref: &Option<ast::TraitRef>,
                   ast_ty: &ast::Ty,
@@ -296,10 +297,10 @@ impl OxidocVisitor {
                                                         trait_ref);
                 module.def_traits.push(def_trait);
             },
-            ast::ItemKind::Impl(unsafety, polarity,
+            ast::ItemKind::Impl(unsafety, polarity, ref defaultness,
                                 ref generics, ref trait_ref,
                                 ref ty, ref items) => {
-                let i = self.visit_impl(item, unsafety,
+                let i = self.visit_impl(item, unsafety, defaultness,
                                         generics, trait_ref,
                                         ty, items);
                 module.impls.push(i);
@@ -309,6 +310,8 @@ impl OxidocVisitor {
             ast::ItemKind::Mac(..) |
             ast::ItemKind::ExternCrate(..) |
             ast::ItemKind::ForeignMod(..) => (),
+            ast::ItemKind::GlobalAsm(..) => (),
+            ast::ItemKind::MacroDef(..) => (),
         }
     }
 

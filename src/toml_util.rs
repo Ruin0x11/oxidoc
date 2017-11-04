@@ -2,7 +2,7 @@ use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 
-use serde::Deserialize;
+use serde::de::DeserializeOwned;
 use toml::Value;
 
 use ::errors::*;
@@ -43,7 +43,7 @@ pub fn get_value_in_table<'a>(value: &'a Value, key: &str) -> Result<&'a Value> 
 }
 
 /// Gets the value of the key in the given TOML table.
-pub fn get_toml_value<T: Deserialize>(value: &Value, table_name: &str, key: &str) -> Result<T> {
+pub fn get_toml_value<T: DeserializeOwned>(value: &Value, table_name: &str, key: &str) -> Result<T> {
     match get_value_in_table(value, table_name) {
         Ok(table) => match get_value_in_table(&table, key) {
             Ok(val) => val.clone().try_into::<T>().chain_err(|| format!("Could not parse value of {} in TOML table {}", key, table_name)),

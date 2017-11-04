@@ -107,7 +107,9 @@ impl Convert<Abi> for abi::Abi {
             abi::Abi::RustIntrinsic     => Abi::RustIntrinsic,
             abi::Abi::RustCall          => Abi::RustCall,
             abi::Abi::PlatformIntrinsic => Abi::PlatformIntrinsic,
-            abi::Abi::Unadjusted        => Abi::Unadjusted
+            abi::Abi::Unadjusted        => Abi::Unadjusted,
+            abi::Abi::Thiscall          => Abi::Thiscall,
+            abi::Abi::X86Interrupt      => Abi::X86Interrupt
         }
     }
 }

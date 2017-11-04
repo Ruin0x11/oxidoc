@@ -7,7 +7,7 @@ use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
 use bincode::{self, Infinite};
-use serde::de::Deserialize;
+use serde::de::DeserializeOwned;
 use serde::ser::Serialize;
 use strsim::levenshtein;
 
@@ -64,7 +64,7 @@ fn create_or_open_file<T: AsRef<Path>>(path: T) -> Result<File> {
 }
 
 pub fn deserialize_object<S, T>(path: T) -> Result<S>
-    where S: Deserialize,
+    where S: DeserializeOwned,
           T: AsRef<Path>
 {
     let path_as = path.as_ref();

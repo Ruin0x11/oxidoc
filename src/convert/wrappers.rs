@@ -57,6 +57,7 @@ pub enum Abi {
     SysV64,
     PtxKernel,
     Msp430Interrupt,
+    X86Interrupt,
 
     // Multiplatform / generic ABIs
     Rust,
@@ -65,7 +66,8 @@ pub enum Abi {
     RustIntrinsic,
     RustCall,
     PlatformIntrinsic,
-    Unadjusted
+    Unadjusted,
+    Thiscall
 }
 
 #[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]

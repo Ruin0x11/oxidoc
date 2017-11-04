@@ -1,35 +1,43 @@
 [package]
+authors = ["Ruin0x11 <ipickering2@gmail.com>"]
 name = "oxidoc"
 version = "0.1.2"
-authors = ["Ruin0x11 <ipickering2@gmail.com>"]
+
+[[bin]]
+doc = false
+name = "oxidoc"
+path = "src/main.rs"
+
+[[test]]
+name = "tests"
 
 [dependencies]
-syntex_syntax = "0.58.1"
-serde = "0.9.9"
-serde_derive = "0.9.9"
-bincode = "0.7.0"
-toml = "0.3"
-clap = "2.25"
-error-chain = "0.10.0"
-log = "0.3"
-env_logger = "0.3"
-pager = "0.11"
-regex = "0.2"
-cursive = { git = "https://github.com/gyscos/Cursive" }
+ansi_term = "0.10.2"
+bincode = "0.9.2"
+clap = "2.*"
+env_logger = "0.4.3"
+error-chain = "0.11.0"
 lazy_static = "0.2.8"
-ansi_term = "0.9"
+log = "0.3.8"
+regex = "0.2.2"
+serde = "1.0.9"
+serde_derive = "1.0.9"
 strsim = "0.6.0"
-term_size = "0.3"
-catmark = { git = "https://github.com/Ruin0x11/catmark", branch = "support_html_rendering" }
+syntex_syntax = "0.59.1"
+term_size = "0.3.0"
+toml = "0.4.2"
+
+[dependencies.catmark]
+git = "https://github.com/Ruin0x11/catmark"
+
+[dependencies.cursive]
+default-features = false
+features = ["pancurses-backend"]
+version = "0.6"
 
 [lib]
 name = "oxidoc"
 path = "src/lib.rs"
 
-[[bin]]
-name = "oxidoc"
-path = "src/main.rs"
-doc = false
-
-[[test]]
-name = "tests"
+[target."cfg(unix)".dependencies]
+pager = "0.13.0"

@@ -12,7 +12,6 @@ extern crate ansi_term;
 extern crate bincode;
 extern crate cursive;
 extern crate env_logger;
-extern crate pager;
 extern crate regex;
 extern crate serde;
 extern crate strsim;
@@ -20,6 +19,9 @@ extern crate syntex_syntax as syntax;
 extern crate toml;
 extern crate term_size;
 extern crate catmark;
+
+#[cfg(unix)]
+extern crate pager;
 
 pub mod convert;
 pub mod document;
