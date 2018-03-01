@@ -120,7 +120,7 @@ fn setup_pager() {
 
 #[cfg(unix)]
 fn get_pager_executable() -> String {
-    if let Ok(pager) = env::var("PAGER") {
+    if let Ok(pager) = std::env::var("PAGER") {
         return pager.to_string();
     }
 
