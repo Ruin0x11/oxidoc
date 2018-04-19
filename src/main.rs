@@ -54,6 +54,9 @@ fn app<'a, 'b>() -> App<'a, 'b> {
                 .takes_value(true)
                 .alias("generate"),
         )
+        .arg(Arg::with_name("pager").short("p").long("pager").help(
+            "Automatically pages output",
+        ))
         .arg(Arg::with_name("query").index(1))
 }
 
@@ -104,7 +107,8 @@ fn run() -> Result<()> {
             None => bail!(ErrorKind::NoSearchQuery),
         };
 
-        page_search_query(query)
+        let enable_pager = matches.is_present("pager");
+        print_search_query(query, enable_pager)
     }
 }
 
@@ -135,7 +139,7 @@ fn get_pager_executable() -> String {
     return executable.to_string();
 }
 
-fn page_search_query(query: &str) -> Result<()> {
+fn print_search_query(query: &str, enable_pager: bool) -> Result<()> {
     let store = Store::load();
     // search::add_search_paths(store.all_locations());
 
@@ -155,7 +159,9 @@ fn page_search_query(query: &str) -> Result<()> {
         })
         .collect();
 
-    setup_pager();
+    if enable_pager {
+        setup_pager();
+    }
 
     for result in formatted {
         println!("{}", result);
