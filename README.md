@@ -6,6 +6,16 @@
 It is alpha-quality software, so some documentation may not be indexed or other strange things may happen.
 
 ## Building
+
+Before building the crate, make sure that you have install all needed dependencies in the system:
+* CMake
+* ncurses header files
+
+To intall them in Debian GNU/Linux or Ubnutu, do the following:
+```
+apt-get install cmake libncursesw6-dev
+```
+
 Build the crate:
 ```
 cargo build --release
